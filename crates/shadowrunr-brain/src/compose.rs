@@ -43,7 +43,9 @@ use crate::orchestrate::requests::{
     AI_REPEAT_NOTE, AUTHORITY_NOTE, NEWCOMER_NOTE, PATRON_NOTE,
 };
 use crate::util::one_line;
-use crate::working::{fitted_window, WindowItem, EPISODE_BUDGET_CHARS};
+use crate::working::{
+    fit_trailing, fitted_window, render_window, WindowItem, EPISODE_BUDGET_CHARS,
+};
 use crate::BrainError;
 
 /// Heading of the enabled optional rules in the stable prefix.
@@ -938,6 +940,17 @@ pub fn delivery_instruction() -> String {
     )
 }
 
+/// The episode labels [`compose_turn`] renders from `window`: the trailing items that fit the
+/// episode budget, in order (what a recall receipt lists).
+pub fn rendered_window_labels(window: &[WindowItem]) -> Vec<String> {
+    let render = |sl: &[WindowItem]| render_window(sl, window.len() - sl.len());
+    let k = fit_trailing(window, EPISODE_BUDGET_CHARS, render);
+    window[window.len() - k..]
+        .iter()
+        .map(|w| w.label.clone())
+        .collect()
+}
+
 /// The per-turn block, in the fixed order.
 pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     let mut s = String::new();
@@ -1026,7 +1039,11 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     if !t.procedurals.is_empty() {
         recall.push_str("Habits you have learned:\n");
         for p in t.procedurals {
-            recall.push_str(&format!("- {}\n", inert(&p.rule, 200)));
+            recall.push_str(&format!(
+                "- [{}] {}\n",
+                inert(&p.key, 80),
+                inert(&p.rule, 200)
+            ));
         }
     }
     if !t.window.is_empty() {
@@ -1158,7 +1175,7 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
     }
     fmt.push_str(&t.pkg.persona.fill(
         "Memory candidates (not spoken): NOTE: <what is worth remembering, with the {follower} \
-         id>\nNothing else.",
+         id; name the [key] of a memory you used>\nNothing else.",
     ));
     section(&mut s, "How to answer", &fmt);
     s.trim_end().to_string()
@@ -1232,6 +1249,7 @@ mod tests {
             updated_ms: 0,
             last_recalled_ms: 0,
             last_decay_ms: 0,
+            last_used_ms: 0,
             viewer_id: None,
         };
         let window = [WindowItem {

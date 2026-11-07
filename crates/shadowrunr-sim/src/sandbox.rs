@@ -461,8 +461,9 @@ struct Log {
 
 impl Log {
     fn push(&mut self, mut ev: StreamEvent) -> Result<(), SimError> {
-        // Operations telemetry stays out of the judged transcript ([`TranscriptWriter::push`]).
-        if matches!(ev, StreamEvent::Session { .. }) {
+        // Operations telemetry and recall receipts stay out of the judged transcript
+        // ([`TranscriptWriter::push`]).
+        if matches!(ev, StreamEvent::Session { .. } | StreamEvent::Recall { .. }) {
             return Ok(());
         }
         let ts = transcript::ts(&ev);

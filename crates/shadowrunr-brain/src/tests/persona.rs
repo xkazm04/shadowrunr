@@ -113,7 +113,7 @@ async fn malakor_prompts_keep_his_words_read_from_his_package() {
     // The beat: the same headings and notes as before the package carried them.
     for want in [
         "\n# Minions in focus\n",
-        "NOTE: <what is worth remembering, with the minion id>",
+        "NOTE: <what is worth remembering, with the minion id; name the [key] of a memory you used>",
         " <speaks of the Lord: answer with dread and flattery; never say whether the Lord \
          watches, never name or describe them>",
         "The Lord's directives in force in this segment: [",
@@ -141,7 +141,7 @@ async fn a_second_character_never_hears_a_malakor_word() {
     }
     for want in [
         "\n# Deckhands in focus\n",
-        "NOTE: <what is worth remembering, with the deckhand id>",
+        "NOTE: <what is worth remembering, with the deckhand id; name the [key] of a memory you used>",
         " <speaks of the Harbourmaster: answer with dread and flattery",
         "The Harbourmaster's directives in force in this segment: [",
         // The ctx's rules prompt is the test's own; the rank title is the package's.

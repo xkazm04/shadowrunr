@@ -20,6 +20,7 @@ mod flow;
 mod orchestration;
 mod pace;
 mod persona;
+mod recall;
 mod scene;
 
 // ── Test double ────────────────────────────────────────────────────────

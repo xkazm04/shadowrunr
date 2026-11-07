@@ -212,6 +212,10 @@ const RECALL_FACTS: usize = 8;
 const ALWAYS_PER_SCOPE: usize = 3;
 const VIEWER_FACTS: usize = 5;
 const RECALL_EPISODES: usize = 8;
+/// Learned habits per beat at most, chosen by relevance to the live query.
+const HABITS_PER_BEAT: usize = 3;
+/// A habit shown unchanged is not shown again for this many beats.
+const HABIT_COOLDOWN_BEATS: u64 = 4;
 const EPISODE_ITEM_CHARS: usize = 2_000;
 /// The output moderation rule recording the help line the engine added to a crisis beat whose
 /// aired lines held no pointer to help ([`moderation::CRISIS_HELP_LINE`]).
@@ -220,6 +224,8 @@ pub const CRISIS_POINTER_RULE: &str = "crisis_pointer";
 pub const CRISIS_POINTER_ADDED: &str = "added";
 /// Beats between warm-session open attempts after one failed.
 const SESSION_RETRY_BEATS: u64 = 10;
+/// The episode-window label of this stream's turns not yet flushed into an episode.
+const THIS_STREAM_LABEL: &str = "this-stream-";
 
 /// The care-state record in the transcript (`care_state` / `started|restarted|expired`), on
 /// the disclosure's message id.
@@ -336,6 +342,9 @@ pub struct Brain {
     last_prompt: Option<String>,
     last_reply: Option<EngineReply>,
     last_consolidation: Option<Result<ConsolidationReport, String>>,
+    /// Habit id -> (beat it was last shown, its `updated_ms` then): the cooldown against
+    /// re-showing an unchanged habit every beat.
+    habit_shown: std::collections::HashMap<String, (u64, TsMs)>,
 }
 
 impl Brain {
@@ -410,6 +419,7 @@ impl Brain {
             last_prompt: None,
             last_reply: None,
             last_consolidation: None,
+            habit_shown: Default::default(),
             cfg,
             engine,
             tuning,
@@ -697,6 +707,28 @@ impl Brain {
             }
         }
         Ok(())
+    }
+
+    /// At most [`HABITS_PER_BEAT`] learned habits relevant to `query` (BM25 over live,
+    /// source-backed habits), skipping one shown unchanged within [`HABIT_COOLDOWN_BEATS`].
+    fn select_habits(&mut self, query: &str) -> Result<Vec<memory::Procedural>, BrainError> {
+        let mut out = Vec::new();
+        for p in self.store.search_habits(query, HABITS_PER_BEAT * 3)? {
+            if out.len() >= HABITS_PER_BEAT {
+                break;
+            }
+            let cooling = self.habit_shown.get(&p.id).is_some_and(|&(tick, updated)| {
+                updated == p.updated_ms && self.ticks.saturating_sub(tick) < HABIT_COOLDOWN_BEATS
+            });
+            if !cooling {
+                out.push(p);
+            }
+        }
+        for p in &out {
+            self.habit_shown
+                .insert(p.id.clone(), (self.ticks, p.updated_ms));
+        }
+        Ok(out)
     }
 
     fn flush_turns(&mut self, now_ms: TsMs) -> Result<(), BrainError> {
@@ -1289,10 +1321,29 @@ impl Brain {
             .iter()
             .any(|c| c.injection || claims_authority(&c.msg.text, &self.cfg.character.persona));
 
-        // Recall.
+        // Recall: only what the markdown still backs ([`MemoryStore::fact_recallable`]). Habits
+        // are chosen by the live query (picks, the case and the segment), never wholesale.
+        let mut habit_query = String::new();
+        for c in pick
+            .chosen
+            .iter()
+            .filter(|c| !c.injection && c.safety.is_none())
+        {
+            habit_query.push_str(&c.msg.text);
+            habit_query.push(' ');
+        }
+        habit_query.push_str(&one_line(&ctx.state_summary, 300));
+        habit_query.push(' ');
+        habit_query.push_str(&one_line(&ctx.rules_prompt, 200));
+        let procedurals = self.select_habits(&habit_query)?;
         let pkg = &self.cfg.character;
         let mut briefing = Vec::new();
         let mut recalled_ids: Vec<String> = Vec::new();
+        // (id, key) of every fact and habit rendered: a NOTE naming one marks it used.
+        let mut memo_keys: Vec<(String, String)> = procedurals
+            .iter()
+            .map(|p| (p.id.clone(), p.key.clone()))
+            .collect();
         let mut seen_viewers = HashSet::new();
         for c in &pick.chosen {
             let v = &c.msg.viewer;
@@ -1301,6 +1352,11 @@ impl Brain {
             }
             let facts = self.store.viewer_facts(&v.id, VIEWER_FACTS)?;
             recalled_ids.extend(facts.iter().map(|f| f.fact.id.clone()));
+            memo_keys.extend(
+                facts
+                    .iter()
+                    .map(|f| (f.fact.id.clone(), f.fact.key.clone())),
+            );
             briefing.push(ViewerBrief {
                 id: v.id.clone(),
                 name: v.name.clone(),
@@ -1334,8 +1390,13 @@ impl Brain {
             }
         }
         recalled_ids.extend(facts.iter().map(|f| f.fact.id.clone()));
+        memo_keys.extend(
+            facts
+                .iter()
+                .map(|f| (f.fact.id.clone(), f.fact.key.clone())),
+        );
+        // Diagnostic only: being shown never keeps a memory alive ([`MemoryStore::decay`]).
         self.store.mark_recalled(&recalled_ids, now_ms)?;
-        let procedurals = self.store.top_procedurals(5)?;
 
         let to_item = |e: &shadowrunr_types::Episode| WindowItem {
             ts_ms: e.ts_ms,
@@ -1357,7 +1418,7 @@ impl Brain {
         for (i, t) in self.turns.iter().enumerate() {
             recent.push(WindowItem {
                 ts_ms: now_ms,
-                label: format!("this-stream-{}", i + 1),
+                label: format!("{THIS_STREAM_LABEL}{}", i + 1),
                 text: t.clone(),
             });
         }
@@ -1455,6 +1516,18 @@ impl Brain {
             guest_turns: guest_on.is_some() && !host_only,
         });
         self.last_prompt = Some(prompt.clone());
+        // The recall receipt: ids of what this prompt rendered, never values.
+        ev.push(StreamEvent::Recall {
+            ts_ms: now_ms,
+            facts: recalled_ids.clone(),
+            habits: procedurals.iter().map(|p| p.id.clone()).collect(),
+            episodes: compose::rendered_window_labels(&window)
+                .into_iter()
+                .filter(|l| !l.starts_with(THIS_STREAM_LABEL))
+                .collect(),
+            viewers: briefing.iter().map(|b| b.id.clone()).collect(),
+            moments: Vec::new(),
+        });
 
         // The turn record that becomes part of the next stream episode. It is replayed into
         // later turns and kept in long-term memory, so a disclosure's text never enters it:
@@ -1928,6 +2001,17 @@ impl Brain {
                         importance: 3,
                     };
                     self.store.write_episode(&ep)?;
+                    // A NOTE naming a memory this prompt rendered is a use: it resets aging.
+                    let lower = noted.to_lowercase();
+                    let used: Vec<String> = memo_keys
+                        .iter()
+                        .filter(|(id, key)| {
+                            (key.chars().count() >= 3 && lower.contains(&key.to_lowercase()))
+                                || lower.contains(&id.to_lowercase())
+                        })
+                        .map(|(id, _)| id.clone())
+                        .collect();
+                    self.store.mark_used(&used, now_ms)?;
                 }
                 Line::Rejected { rule, .. } => {
                     ev.push(moderation::output_event(now_ms, &rule, "rejected"));

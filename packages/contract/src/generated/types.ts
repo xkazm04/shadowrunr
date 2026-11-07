@@ -516,6 +516,31 @@ export type StreamEvent =
       type: "beat_plan";
     }
   | {
+      /**
+       * Episode ids rendered in the episode window (this stream's unflushed turns are not
+       * episodes yet and are not listed).
+       */
+      episodes?: string[];
+      /**
+       * Fact ids rendered, viewer facts included.
+       */
+      facts?: string[];
+      /**
+       * Learned habit (procedural) ids rendered.
+       */
+      habits?: string[];
+      /**
+       * Moment fact ids offered as recognition of a past night (each also in `facts`).
+       */
+      moments?: string[];
+      ts_ms: number;
+      type: "recall";
+      /**
+       * Viewer ids briefed this beat.
+       */
+      viewers?: string[];
+    }
+  | {
       detail?: string;
       state: FleetHealth;
       ts_ms: number;

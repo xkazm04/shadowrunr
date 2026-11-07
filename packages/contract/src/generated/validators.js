@@ -7,7 +7,7 @@ export const validateServerFrame = validate897;
 const schema349 = {"allOf":[{"$ref":"#/$defs/ServerFrame"}]};
 const schema350 = {"anyOf":[{"$ref":"#/$defs/EventFrame"},{"$ref":"#/$defs/ErrorEnvelope"},{"$ref":"#/$defs/StreamEvent"}],"description":"Anything `/events` may push: an enveloped event (after a `since` subscribe), an error frame, or a bare StreamEvent (legacy mode)."};
 const schema351 = {"description":"`/events` -> client in enveloped mode: one transcript event with its position. `seq` is the\n1-based index of the event in its run's transcript, so live and stored runs agree and a\nreconnecting client resumes with `since` = the last seq it saw.","properties":{"event":{"$ref":"#/$defs/StreamEvent"},"run_id":{"type":"string"},"seq":{"format":"uint64","minimum":0,"type":"integer"}},"required":["seq","run_id","event"],"type":"object"};
-const schema222 = {"oneOf":[{"properties":{"audience_size":{"format":"uint32","minimum":0,"type":"integer"},"brief":{"$ref":"#/$defs/StreamBrief","description":"Addition (WP15): the brief the brain received in its stable prefix for this stream\n(the chosen plan's dispatch, segments and topics plus the active directives).\nOmitted when the stream had no brief."},"character":{"type":"string"},"core_tier":{"$ref":"#/$defs/ModelTier"},"host_name":{"description":"The character's short name as the stage labels its lines and face, e.g. \"Malakor\"\n(`[identity] name`, else the last word of the package name). Omitted by older\nstreams: the stage then says \"Host\".","type":"string"},"stream_id":{"type":"string"},"tone_variant":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"stream_start","type":"string"}},"required":["type","ts_ms","stream_id","character","tone_variant","core_tier","audience_size"],"type":"object"},{"properties":{"segment":{"$ref":"#/$defs/SegmentId"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"segment_start","type":"string"}},"required":["type","ts_ms","segment"],"type":"object"},{"properties":{"segment":{"$ref":"#/$defs/SegmentId"},"ses":{"format":"double","type":"number"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"segment_end","type":"string"}},"required":["type","ts_ms","segment"],"type":"object"},{"description":"SEG-02A: the Case being audited, emitted once right after its `segment_start`.","properties":{"case":{"$ref":"#/$defs/Case"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"case_open","type":"string"}},"required":["type","ts_ms","case"],"type":"object"},{"description":"SEG-03: a scene begins. Its lines follow as `say` events (guest lines as the foil).","properties":{"guest":{"description":"Foil id of the guest.","type":"string"},"scene_id":{"type":"string"},"title":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"scene_start","type":"string"}},"required":["type","ts_ms","scene_id","title","guest"],"type":"object"},{"description":"SEG-03: the scene's last line was delivered (or the scene was cut short).","properties":{"scene_id":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"scene_end","type":"string"}},"required":["type","ts_ms","scene_id"],"type":"object"},{"properties":{"msg":{"$ref":"#/$defs/ChatMsg"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"chat","type":"string"}},"required":["type","ts_ms","msg"],"type":"object"},{"description":"The chat picker chose these messages for the core thread.","properties":{"msg_ids":{"items":{"type":"string"},"type":"array"},"reason":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"picked","type":"string"}},"required":["type","ts_ms","msg_ids","reason"],"type":"object"},{"properties":{"delivery":{"$ref":"#/$defs/Delivery","description":"How the line is spoken: the cue the model wrote at its start. Absent on lines with\nno cue, and on the engine's own lines (stalls, sign-offs)."},"first_text_ms":{"format":"uint64","minimum":0,"type":"integer"},"foil":{"description":"Foil id when speaker = foil.","type":"string"},"replying_to":{"description":"Message ids this line answers.","items":{"type":"string"},"type":"array"},"speaker":{"$ref":"#/$defs/Speaker"},"text":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"say","type":"string"}},"required":["type","ts_ms","speaker","text"],"type":"object"},{"properties":{"op":{"$ref":"#/$defs/Op"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"op","type":"string"}},"required":["type","ts_ms","op"],"type":"object"},{"properties":{"closed":{"type":"boolean"},"poll_id":{"type":"string"},"tallies":{"items":{"$ref":"#/$defs/VoteTally"},"type":"array"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"vote","type":"string"}},"required":["type","ts_ms","poll_id","tallies","closed"],"type":"object"},{"properties":{"action":{"type":"string"},"msg_id":{"type":"string"},"rule":{"type":"string"},"stage":{"$ref":"#/$defs/ModStage"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"moderation","type":"string"}},"required":["type","ts_ms","stage","rule","action"],"type":"object"},{"properties":{"from":{"$ref":"#/$defs/SegmentId"},"reason":{"type":"string"},"to":{"$ref":"#/$defs/SegmentId"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"handover","type":"string"}},"required":["type","ts_ms","from","to","reason"],"type":"object"},{"description":"A staged case record the stage may show (sent before the `show_screen` that names it).","properties":{"record":{"$ref":"#/$defs/ShownRecord"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"record_shown","type":"string"}},"required":["type","ts_ms","record"],"type":"object"},{"description":"A string the runtime accepted onto the evidence board (`pin_link`), with its record's\ngrade so the stage draws below-DOC as alleged.","properties":{"from":{"type":"string"},"grade":{"$ref":"#/$defs/EvidenceGrade"},"record_id":{"type":"string"},"rel":{"$ref":"#/$defs/LinkRel"},"to":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"link_pinned","type":"string"}},"required":["type","ts_ms","from","to","rel","record_id","grade"],"type":"object"},{"description":"Background job lifecycle (research subagents etc.).","properties":{"job_id":{"type":"string"},"status":{"type":"string"},"summary":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"job","type":"string"}},"required":["type","ts_ms","job_id","status"],"type":"object"},{"description":"What the orchestrator chose for this beat: the record that makes its choices judgeable.","properties":{"bit_id":{"description":"The prepared bit or cold-open beat it voiced, if any.","type":"string"},"mode":{"$ref":"#/$defs/BeatMode"},"picks":{"description":"Chat messages passed to the voice this beat.","format":"uint32","minimum":0,"type":"integer"},"reason":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"beat_plan","type":"string"}},"required":["type","ts_ms","mode","picks","reason"],"type":"object"},{"description":"The brain's view of the engine fleet changed (WP sandbox): written on every\ntransition, so an outage and its recovery are on the record.","properties":{"detail":{"type":"string"},"state":{"$ref":"#/$defs/FleetHealth"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"health","type":"string"}},"required":["type","ts_ms","state"],"type":"object"},{"description":"The core's warm session failed: it did not open, or it died mid-call and the beat fell\nback to a cold call. `detail` is the engine's error text, never a prompt or chat.","properties":{"detail":{"type":"string"},"kind":{"$ref":"#/$defs/SessionEventKind"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"session","type":"string"}},"required":["type","ts_ms","kind"],"type":"object"},{"properties":{"reason":{"$ref":"#/$defs/EndReason"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"stream_end","type":"string"}},"required":["type","ts_ms","reason"],"type":"object"}],"type":"object","discriminator":{"propertyName":"type"}};
+const schema222 = {"oneOf":[{"properties":{"audience_size":{"format":"uint32","minimum":0,"type":"integer"},"brief":{"$ref":"#/$defs/StreamBrief","description":"Addition (WP15): the brief the brain received in its stable prefix for this stream\n(the chosen plan's dispatch, segments and topics plus the active directives).\nOmitted when the stream had no brief."},"character":{"type":"string"},"core_tier":{"$ref":"#/$defs/ModelTier"},"host_name":{"description":"The character's short name as the stage labels its lines and face, e.g. \"Malakor\"\n(`[identity] name`, else the last word of the package name). Omitted by older\nstreams: the stage then says \"Host\".","type":"string"},"stream_id":{"type":"string"},"tone_variant":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"stream_start","type":"string"}},"required":["type","ts_ms","stream_id","character","tone_variant","core_tier","audience_size"],"type":"object"},{"properties":{"segment":{"$ref":"#/$defs/SegmentId"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"segment_start","type":"string"}},"required":["type","ts_ms","segment"],"type":"object"},{"properties":{"segment":{"$ref":"#/$defs/SegmentId"},"ses":{"format":"double","type":"number"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"segment_end","type":"string"}},"required":["type","ts_ms","segment"],"type":"object"},{"description":"SEG-02A: the Case being audited, emitted once right after its `segment_start`.","properties":{"case":{"$ref":"#/$defs/Case"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"case_open","type":"string"}},"required":["type","ts_ms","case"],"type":"object"},{"description":"SEG-03: a scene begins. Its lines follow as `say` events (guest lines as the foil).","properties":{"guest":{"description":"Foil id of the guest.","type":"string"},"scene_id":{"type":"string"},"title":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"scene_start","type":"string"}},"required":["type","ts_ms","scene_id","title","guest"],"type":"object"},{"description":"SEG-03: the scene's last line was delivered (or the scene was cut short).","properties":{"scene_id":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"scene_end","type":"string"}},"required":["type","ts_ms","scene_id"],"type":"object"},{"properties":{"msg":{"$ref":"#/$defs/ChatMsg"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"chat","type":"string"}},"required":["type","ts_ms","msg"],"type":"object"},{"description":"The chat picker chose these messages for the core thread.","properties":{"msg_ids":{"items":{"type":"string"},"type":"array"},"reason":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"picked","type":"string"}},"required":["type","ts_ms","msg_ids","reason"],"type":"object"},{"properties":{"delivery":{"$ref":"#/$defs/Delivery","description":"How the line is spoken: the cue the model wrote at its start. Absent on lines with\nno cue, and on the engine's own lines (stalls, sign-offs)."},"first_text_ms":{"format":"uint64","minimum":0,"type":"integer"},"foil":{"description":"Foil id when speaker = foil.","type":"string"},"replying_to":{"description":"Message ids this line answers.","items":{"type":"string"},"type":"array"},"speaker":{"$ref":"#/$defs/Speaker"},"text":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"say","type":"string"}},"required":["type","ts_ms","speaker","text"],"type":"object"},{"properties":{"op":{"$ref":"#/$defs/Op"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"op","type":"string"}},"required":["type","ts_ms","op"],"type":"object"},{"properties":{"closed":{"type":"boolean"},"poll_id":{"type":"string"},"tallies":{"items":{"$ref":"#/$defs/VoteTally"},"type":"array"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"vote","type":"string"}},"required":["type","ts_ms","poll_id","tallies","closed"],"type":"object"},{"properties":{"action":{"type":"string"},"msg_id":{"type":"string"},"rule":{"type":"string"},"stage":{"$ref":"#/$defs/ModStage"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"moderation","type":"string"}},"required":["type","ts_ms","stage","rule","action"],"type":"object"},{"properties":{"from":{"$ref":"#/$defs/SegmentId"},"reason":{"type":"string"},"to":{"$ref":"#/$defs/SegmentId"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"handover","type":"string"}},"required":["type","ts_ms","from","to","reason"],"type":"object"},{"description":"A staged case record the stage may show (sent before the `show_screen` that names it).","properties":{"record":{"$ref":"#/$defs/ShownRecord"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"record_shown","type":"string"}},"required":["type","ts_ms","record"],"type":"object"},{"description":"A string the runtime accepted onto the evidence board (`pin_link`), with its record's\ngrade so the stage draws below-DOC as alleged.","properties":{"from":{"type":"string"},"grade":{"$ref":"#/$defs/EvidenceGrade"},"record_id":{"type":"string"},"rel":{"$ref":"#/$defs/LinkRel"},"to":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"link_pinned","type":"string"}},"required":["type","ts_ms","from","to","rel","record_id","grade"],"type":"object"},{"description":"Background job lifecycle (research subagents etc.).","properties":{"job_id":{"type":"string"},"status":{"type":"string"},"summary":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"job","type":"string"}},"required":["type","ts_ms","job_id","status"],"type":"object"},{"description":"What the orchestrator chose for this beat: the record that makes its choices judgeable.","properties":{"bit_id":{"description":"The prepared bit or cold-open beat it voiced, if any.","type":"string"},"mode":{"$ref":"#/$defs/BeatMode"},"picks":{"description":"Chat messages passed to the voice this beat.","format":"uint32","minimum":0,"type":"integer"},"reason":{"type":"string"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"beat_plan","type":"string"}},"required":["type","ts_ms","mode","picks","reason"],"type":"object"},{"description":"What long-term memory one composed beat put in front of the voice: ids only, never\nvalues, so a shared transcript never shows what he knows about a viewer. One per beat\nthat composed a prompt (never a hold or a scene beat). Addition (recall receipts):\nolder transcripts carry none, and a reader that does not know the type skips it.","properties":{"episodes":{"description":"Episode ids rendered in the episode window (this stream's unflushed turns are not\nepisodes yet and are not listed).","items":{"type":"string"},"type":"array"},"facts":{"description":"Fact ids rendered, viewer facts included.","items":{"type":"string"},"type":"array"},"habits":{"description":"Learned habit (procedural) ids rendered.","items":{"type":"string"},"type":"array"},"moments":{"description":"Moment fact ids offered as recognition of a past night (each also in `facts`).","items":{"type":"string"},"type":"array"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"recall","type":"string"},"viewers":{"description":"Viewer ids briefed this beat.","items":{"type":"string"},"type":"array"}},"required":["type","ts_ms"],"type":"object"},{"description":"The brain's view of the engine fleet changed (WP sandbox): written on every\ntransition, so an outage and its recovery are on the record.","properties":{"detail":{"type":"string"},"state":{"$ref":"#/$defs/FleetHealth"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"health","type":"string"}},"required":["type","ts_ms","state"],"type":"object"},{"description":"The core's warm session failed: it did not open, or it died mid-call and the beat fell\nback to a cold call. `detail` is the engine's error text, never a prompt or chat.","properties":{"detail":{"type":"string"},"kind":{"$ref":"#/$defs/SessionEventKind"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"session","type":"string"}},"required":["type","ts_ms","kind"],"type":"object"},{"properties":{"reason":{"$ref":"#/$defs/EndReason"},"ts_ms":{"format":"int64","type":"integer"},"type":{"const":"stream_end","type":"string"}},"required":["type","ts_ms","reason"],"type":"object"}],"type":"object","discriminator":{"propertyName":"type"}};
 const schema223 = {"description":"What one stream receives from the Lord of the Darkness (WP15): the latest chosen plan's\ndispatch, segments and topics, plus the directives that are active when the stream starts\n(never proposed or inactive ones). The brain renders it once, in its stable prefix; the sim\nhashes its canonical JSON into the instrument. Built by `shadowrunr_brain::build_stream_brief`\n(the one builder, used by the live path and the sim). A brief with nothing in it is no brief.","properties":{"directives":{"default":[],"description":"Active directives only, oldest first.","items":{"$ref":"#/$defs/Directive"},"type":"array"},"lord_dispatch":{"description":"The Lord's message for the stream, in character. LLM-composed from report text, so the\nbrain frames it as a message, never as a rule.","type":"string"},"segments":{"items":{"$ref":"#/$defs/PlanSegment"},"type":"array"},"topics":{"default":[],"items":{"type":"string"},"type":"array"}},"required":[],"type":"object"};
 const schema112 = {"properties":{"active":{"type":"boolean"},"created_ms":{"format":"int64","type":"integer"},"id":{"type":"string"},"kind":{"$ref":"#/$defs/DirectiveKind"},"proposed":{"description":"Addition (WP14): proposed by the Reconciler in a `lord.chat` reply and not yet decided\nby the owner. A proposed directive is inactive (`active: false`), so no stream reads\nit. `directive.add` with the same kind, text and scope keeps it (it becomes active and\nloses `proposed`); `directive.deactivate` drops it. Omitted when false.","type":"boolean"},"scope":{"$ref":"#/$defs/SegmentId"},"text":{"type":"string"}},"required":["id","kind","text","created_ms","active"],"type":"object"};
 const schema111 = {"enum":["prevent","try"],"type":"string"};
@@ -5748,21 +5748,39 @@ props0.ts_ms = true;
 props0.type = true;
 }
 }
-else if(tag0 === "health"){
+else if(tag0 === "recall"){
 const _errs189 = errors;
 if(errors === _errs189){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing17;
-if((((data.type === undefined) && (missing17 = "type")) || ((data.ts_ms === undefined) && (missing17 = "ts_ms"))) || ((data.state === undefined) && (missing17 = "state"))){
+if(((data.type === undefined) && (missing17 = "type")) || ((data.ts_ms === undefined) && (missing17 = "ts_ms"))){
 validate558.errors = [{instancePath,schemaPath:"#/oneOf/17/required",keyword:"required",params:{missingProperty: missing17},message:"must have required property '"+missing17+"'"}];
 return false;
 }
 else {
-if(data.detail !== undefined){
+if(data.episodes !== undefined){
+let data85 = data.episodes;
 const _errs191 = errors;
-if(typeof data.detail !== "string"){
-validate558.errors = [{instancePath:instancePath+"/detail",schemaPath:"#/oneOf/17/properties/detail/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+if(errors === _errs191){
+if(Array.isArray(data85)){
+var valid40 = true;
+const len3 = data85.length;
+for(let i3=0; i3<len3; i3++){
+const _errs193 = errors;
+if(typeof data85[i3] !== "string"){
+validate558.errors = [{instancePath:instancePath+"/episodes/" + i3,schemaPath:"#/oneOf/17/properties/episodes/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
+}
+var valid40 = _errs193 === errors;
+if(!valid40){
+break;
+}
+}
+}
+else {
+validate558.errors = [{instancePath:instancePath+"/episodes",schemaPath:"#/oneOf/17/properties/episodes/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
 }
 var valid39 = _errs191 === errors;
 }
@@ -5770,46 +5788,157 @@ else {
 var valid39 = true;
 }
 if(valid39){
-if(data.state !== undefined){
-const _errs193 = errors;
-if(!(validate618(data.state, {instancePath:instancePath+"/state",parentData:data,parentDataProperty:"state",rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate618.errors : vErrors.concat(validate618.errors);
-errors = vErrors.length;
+if(data.facts !== undefined){
+let data87 = data.facts;
+const _errs195 = errors;
+if(errors === _errs195){
+if(Array.isArray(data87)){
+var valid41 = true;
+const len4 = data87.length;
+for(let i4=0; i4<len4; i4++){
+const _errs197 = errors;
+if(typeof data87[i4] !== "string"){
+validate558.errors = [{instancePath:instancePath+"/facts/" + i4,schemaPath:"#/oneOf/17/properties/facts/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
 }
-var valid39 = _errs193 === errors;
+var valid41 = _errs197 === errors;
+if(!valid41){
+break;
+}
+}
+}
+else {
+validate558.errors = [{instancePath:instancePath+"/facts",schemaPath:"#/oneOf/17/properties/facts/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
+}
+var valid39 = _errs195 === errors;
+}
+else {
+var valid39 = true;
+}
+if(valid39){
+if(data.habits !== undefined){
+let data89 = data.habits;
+const _errs199 = errors;
+if(errors === _errs199){
+if(Array.isArray(data89)){
+var valid42 = true;
+const len5 = data89.length;
+for(let i5=0; i5<len5; i5++){
+const _errs201 = errors;
+if(typeof data89[i5] !== "string"){
+validate558.errors = [{instancePath:instancePath+"/habits/" + i5,schemaPath:"#/oneOf/17/properties/habits/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid42 = _errs201 === errors;
+if(!valid42){
+break;
+}
+}
+}
+else {
+validate558.errors = [{instancePath:instancePath+"/habits",schemaPath:"#/oneOf/17/properties/habits/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
+}
+var valid39 = _errs199 === errors;
+}
+else {
+var valid39 = true;
+}
+if(valid39){
+if(data.moments !== undefined){
+let data91 = data.moments;
+const _errs203 = errors;
+if(errors === _errs203){
+if(Array.isArray(data91)){
+var valid43 = true;
+const len6 = data91.length;
+for(let i6=0; i6<len6; i6++){
+const _errs205 = errors;
+if(typeof data91[i6] !== "string"){
+validate558.errors = [{instancePath:instancePath+"/moments/" + i6,schemaPath:"#/oneOf/17/properties/moments/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid43 = _errs205 === errors;
+if(!valid43){
+break;
+}
+}
+}
+else {
+validate558.errors = [{instancePath:instancePath+"/moments",schemaPath:"#/oneOf/17/properties/moments/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
+}
+var valid39 = _errs203 === errors;
 }
 else {
 var valid39 = true;
 }
 if(valid39){
 if(data.ts_ms !== undefined){
-let data87 = data.ts_ms;
-const _errs194 = errors;
-if(!(((typeof data87 == "number") && (!(data87 % 1) && !isNaN(data87))) && (isFinite(data87)))){
+let data93 = data.ts_ms;
+const _errs207 = errors;
+if(!(((typeof data93 == "number") && (!(data93 % 1) && !isNaN(data93))) && (isFinite(data93)))){
 validate558.errors = [{instancePath:instancePath+"/ts_ms",schemaPath:"#/oneOf/17/properties/ts_ms/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-var valid39 = _errs194 === errors;
+var valid39 = _errs207 === errors;
 }
 else {
 var valid39 = true;
 }
 if(valid39){
 if(data.type !== undefined){
-let data88 = data.type;
-const _errs196 = errors;
-if(typeof data88 !== "string"){
+let data94 = data.type;
+const _errs209 = errors;
+if(typeof data94 !== "string"){
 validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/17/properties/type/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-if("health" !== data88){
-validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/17/properties/type/const",keyword:"const",params:{allowedValue: "health"},message:"must be equal to constant"}];
+if("recall" !== data94){
+validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/17/properties/type/const",keyword:"const",params:{allowedValue: "recall"},message:"must be equal to constant"}];
 return false;
 }
-var valid39 = _errs196 === errors;
+var valid39 = _errs209 === errors;
 }
 else {
 var valid39 = true;
+}
+if(valid39){
+if(data.viewers !== undefined){
+let data95 = data.viewers;
+const _errs211 = errors;
+if(errors === _errs211){
+if(Array.isArray(data95)){
+var valid44 = true;
+const len7 = data95.length;
+for(let i7=0; i7<len7; i7++){
+const _errs213 = errors;
+if(typeof data95[i7] !== "string"){
+validate558.errors = [{instancePath:instancePath+"/viewers/" + i7,schemaPath:"#/oneOf/17/properties/viewers/items/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+var valid44 = _errs213 === errors;
+if(!valid44){
+break;
+}
+}
+}
+else {
+validate558.errors = [{instancePath:instancePath+"/viewers",schemaPath:"#/oneOf/17/properties/viewers/type",keyword:"type",params:{type: "array"},message:"must be array"}];
+return false;
+}
+}
+var valid39 = _errs211 === errors;
+}
+else {
+var valid39 = true;
+}
+}
+}
 }
 }
 }
@@ -5823,74 +5952,77 @@ return false;
 }
 if(props0 !== true){
 props0 = props0 || {};
-props0.detail = true;
-props0.state = true;
+props0.episodes = true;
+props0.facts = true;
+props0.habits = true;
+props0.moments = true;
 props0.ts_ms = true;
 props0.type = true;
+props0.viewers = true;
 }
 }
-else if(tag0 === "session"){
-const _errs198 = errors;
-if(errors === _errs198){
+else if(tag0 === "health"){
+const _errs215 = errors;
+if(errors === _errs215){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing18;
-if((((data.type === undefined) && (missing18 = "type")) || ((data.ts_ms === undefined) && (missing18 = "ts_ms"))) || ((data.kind === undefined) && (missing18 = "kind"))){
+if((((data.type === undefined) && (missing18 = "type")) || ((data.ts_ms === undefined) && (missing18 = "ts_ms"))) || ((data.state === undefined) && (missing18 = "state"))){
 validate558.errors = [{instancePath,schemaPath:"#/oneOf/18/required",keyword:"required",params:{missingProperty: missing18},message:"must have required property '"+missing18+"'"}];
 return false;
 }
 else {
 if(data.detail !== undefined){
-const _errs200 = errors;
+const _errs217 = errors;
 if(typeof data.detail !== "string"){
 validate558.errors = [{instancePath:instancePath+"/detail",schemaPath:"#/oneOf/18/properties/detail/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-var valid41 = _errs200 === errors;
+var valid46 = _errs217 === errors;
 }
 else {
-var valid41 = true;
+var valid46 = true;
 }
-if(valid41){
-if(data.kind !== undefined){
-const _errs202 = errors;
-if(!(validate620(data.kind, {instancePath:instancePath+"/kind",parentData:data,parentDataProperty:"kind",rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate620.errors : vErrors.concat(validate620.errors);
+if(valid46){
+if(data.state !== undefined){
+const _errs219 = errors;
+if(!(validate618(data.state, {instancePath:instancePath+"/state",parentData:data,parentDataProperty:"state",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate618.errors : vErrors.concat(validate618.errors);
 errors = vErrors.length;
 }
-var valid41 = _errs202 === errors;
+var valid46 = _errs219 === errors;
 }
 else {
-var valid41 = true;
+var valid46 = true;
 }
-if(valid41){
+if(valid46){
 if(data.ts_ms !== undefined){
-let data91 = data.ts_ms;
-const _errs203 = errors;
-if(!(((typeof data91 == "number") && (!(data91 % 1) && !isNaN(data91))) && (isFinite(data91)))){
+let data99 = data.ts_ms;
+const _errs220 = errors;
+if(!(((typeof data99 == "number") && (!(data99 % 1) && !isNaN(data99))) && (isFinite(data99)))){
 validate558.errors = [{instancePath:instancePath+"/ts_ms",schemaPath:"#/oneOf/18/properties/ts_ms/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-var valid41 = _errs203 === errors;
+var valid46 = _errs220 === errors;
 }
 else {
-var valid41 = true;
+var valid46 = true;
 }
-if(valid41){
+if(valid46){
 if(data.type !== undefined){
-let data92 = data.type;
-const _errs205 = errors;
-if(typeof data92 !== "string"){
+let data100 = data.type;
+const _errs222 = errors;
+if(typeof data100 !== "string"){
 validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/18/properties/type/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-if("session" !== data92){
-validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/18/properties/type/const",keyword:"const",params:{allowedValue: "session"},message:"must be equal to constant"}];
+if("health" !== data100){
+validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/18/properties/type/const",keyword:"const",params:{allowedValue: "health"},message:"must be equal to constant"}];
 return false;
 }
-var valid41 = _errs205 === errors;
+var valid46 = _errs222 === errors;
 }
 else {
-var valid41 = true;
+var valid46 = true;
 }
 }
 }
@@ -5905,61 +6037,74 @@ return false;
 if(props0 !== true){
 props0 = props0 || {};
 props0.detail = true;
-props0.kind = true;
+props0.state = true;
 props0.ts_ms = true;
 props0.type = true;
 }
 }
-else if(tag0 === "stream_end"){
-const _errs207 = errors;
-if(errors === _errs207){
+else if(tag0 === "session"){
+const _errs224 = errors;
+if(errors === _errs224){
 if(data && typeof data == "object" && !Array.isArray(data)){
 let missing19;
-if((((data.type === undefined) && (missing19 = "type")) || ((data.ts_ms === undefined) && (missing19 = "ts_ms"))) || ((data.reason === undefined) && (missing19 = "reason"))){
+if((((data.type === undefined) && (missing19 = "type")) || ((data.ts_ms === undefined) && (missing19 = "ts_ms"))) || ((data.kind === undefined) && (missing19 = "kind"))){
 validate558.errors = [{instancePath,schemaPath:"#/oneOf/19/required",keyword:"required",params:{missingProperty: missing19},message:"must have required property '"+missing19+"'"}];
 return false;
 }
 else {
-if(data.reason !== undefined){
-const _errs209 = errors;
-if(!(validate622(data.reason, {instancePath:instancePath+"/reason",parentData:data,parentDataProperty:"reason",rootData,dynamicAnchors}))){
-vErrors = vErrors === null ? validate622.errors : vErrors.concat(validate622.errors);
-errors = vErrors.length;
+if(data.detail !== undefined){
+const _errs226 = errors;
+if(typeof data.detail !== "string"){
+validate558.errors = [{instancePath:instancePath+"/detail",schemaPath:"#/oneOf/19/properties/detail/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
 }
-var valid43 = _errs209 === errors;
+var valid48 = _errs226 === errors;
 }
 else {
-var valid43 = true;
+var valid48 = true;
 }
-if(valid43){
+if(valid48){
+if(data.kind !== undefined){
+const _errs228 = errors;
+if(!(validate620(data.kind, {instancePath:instancePath+"/kind",parentData:data,parentDataProperty:"kind",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate620.errors : vErrors.concat(validate620.errors);
+errors = vErrors.length;
+}
+var valid48 = _errs228 === errors;
+}
+else {
+var valid48 = true;
+}
+if(valid48){
 if(data.ts_ms !== undefined){
-let data94 = data.ts_ms;
-const _errs210 = errors;
-if(!(((typeof data94 == "number") && (!(data94 % 1) && !isNaN(data94))) && (isFinite(data94)))){
+let data103 = data.ts_ms;
+const _errs229 = errors;
+if(!(((typeof data103 == "number") && (!(data103 % 1) && !isNaN(data103))) && (isFinite(data103)))){
 validate558.errors = [{instancePath:instancePath+"/ts_ms",schemaPath:"#/oneOf/19/properties/ts_ms/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-var valid43 = _errs210 === errors;
+var valid48 = _errs229 === errors;
 }
 else {
-var valid43 = true;
+var valid48 = true;
 }
-if(valid43){
+if(valid48){
 if(data.type !== undefined){
-let data95 = data.type;
-const _errs212 = errors;
-if(typeof data95 !== "string"){
+let data104 = data.type;
+const _errs231 = errors;
+if(typeof data104 !== "string"){
 validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/19/properties/type/type",keyword:"type",params:{type: "string"},message:"must be string"}];
 return false;
 }
-if("stream_end" !== data95){
-validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/19/properties/type/const",keyword:"const",params:{allowedValue: "stream_end"},message:"must be equal to constant"}];
+if("session" !== data104){
+validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/19/properties/type/const",keyword:"const",params:{allowedValue: "session"},message:"must be equal to constant"}];
 return false;
 }
-var valid43 = _errs212 === errors;
+var valid48 = _errs231 === errors;
 }
 else {
-var valid43 = true;
+var valid48 = true;
+}
 }
 }
 }
@@ -5967,6 +6112,74 @@ var valid43 = true;
 }
 else {
 validate558.errors = [{instancePath,schemaPath:"#/oneOf/19/type",keyword:"type",params:{type: "object"},message:"must be object"}];
+return false;
+}
+}
+if(props0 !== true){
+props0 = props0 || {};
+props0.detail = true;
+props0.kind = true;
+props0.ts_ms = true;
+props0.type = true;
+}
+}
+else if(tag0 === "stream_end"){
+const _errs233 = errors;
+if(errors === _errs233){
+if(data && typeof data == "object" && !Array.isArray(data)){
+let missing20;
+if((((data.type === undefined) && (missing20 = "type")) || ((data.ts_ms === undefined) && (missing20 = "ts_ms"))) || ((data.reason === undefined) && (missing20 = "reason"))){
+validate558.errors = [{instancePath,schemaPath:"#/oneOf/20/required",keyword:"required",params:{missingProperty: missing20},message:"must have required property '"+missing20+"'"}];
+return false;
+}
+else {
+if(data.reason !== undefined){
+const _errs235 = errors;
+if(!(validate622(data.reason, {instancePath:instancePath+"/reason",parentData:data,parentDataProperty:"reason",rootData,dynamicAnchors}))){
+vErrors = vErrors === null ? validate622.errors : vErrors.concat(validate622.errors);
+errors = vErrors.length;
+}
+var valid50 = _errs235 === errors;
+}
+else {
+var valid50 = true;
+}
+if(valid50){
+if(data.ts_ms !== undefined){
+let data106 = data.ts_ms;
+const _errs236 = errors;
+if(!(((typeof data106 == "number") && (!(data106 % 1) && !isNaN(data106))) && (isFinite(data106)))){
+validate558.errors = [{instancePath:instancePath+"/ts_ms",schemaPath:"#/oneOf/20/properties/ts_ms/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
+return false;
+}
+var valid50 = _errs236 === errors;
+}
+else {
+var valid50 = true;
+}
+if(valid50){
+if(data.type !== undefined){
+let data107 = data.type;
+const _errs238 = errors;
+if(typeof data107 !== "string"){
+validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/20/properties/type/type",keyword:"type",params:{type: "string"},message:"must be string"}];
+return false;
+}
+if("stream_end" !== data107){
+validate558.errors = [{instancePath:instancePath+"/type",schemaPath:"#/oneOf/20/properties/type/const",keyword:"const",params:{allowedValue: "stream_end"},message:"must be equal to constant"}];
+return false;
+}
+var valid50 = _errs238 === errors;
+}
+else {
+var valid50 = true;
+}
+}
+}
+}
+}
+else {
+validate558.errors = [{instancePath,schemaPath:"#/oneOf/20/type",keyword:"type",params:{type: "object"},message:"must be object"}];
 return false;
 }
 }

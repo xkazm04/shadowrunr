@@ -9491,6 +9491,59 @@
           "type": "object"
         },
         {
+          "description": "What long-term memory one composed beat put in front of the voice: ids only, never\nvalues, so a shared transcript never shows what he knows about a viewer. One per beat\nthat composed a prompt (never a hold or a scene beat). Addition (recall receipts):\nolder transcripts carry none, and a reader that does not know the type skips it.",
+          "properties": {
+            "episodes": {
+              "description": "Episode ids rendered in the episode window (this stream's unflushed turns are not\nepisodes yet and are not listed).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "facts": {
+              "description": "Fact ids rendered, viewer facts included.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "habits": {
+              "description": "Learned habit (procedural) ids rendered.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "moments": {
+              "description": "Moment fact ids offered as recognition of a past night (each also in `facts`).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "ts_ms": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": {
+              "const": "recall",
+              "type": "string"
+            },
+            "viewers": {
+              "description": "Viewer ids briefed this beat.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "ts_ms"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The brain's view of the engine fleet changed (WP sandbox): written on every\ntransition, so an outage and its recovery are on the record.",
           "properties": {
             "detail": {

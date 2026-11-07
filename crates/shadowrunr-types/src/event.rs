@@ -285,6 +285,29 @@ pub enum StreamEvent {
         picks: u32,
         reason: String,
     },
+    /// What long-term memory one composed beat put in front of the voice: ids only, never
+    /// values, so a shared transcript never shows what he knows about a viewer. One per beat
+    /// that composed a prompt (never a hold or a scene beat). Addition (recall receipts):
+    /// older transcripts carry none, and a reader that does not know the type skips it.
+    Recall {
+        ts_ms: TsMs,
+        /// Fact ids rendered, viewer facts included.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        facts: Vec<String>,
+        /// Learned habit (procedural) ids rendered.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        habits: Vec<String>,
+        /// Episode ids rendered in the episode window (this stream's unflushed turns are not
+        /// episodes yet and are not listed).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        episodes: Vec<String>,
+        /// Viewer ids briefed this beat.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        viewers: Vec<String>,
+        /// Moment fact ids offered as recognition of a past night (each also in `facts`).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        moments: Vec<String>,
+    },
     /// The brain's view of the engine fleet changed (WP sandbox): written on every
     /// transition, so an outage and its recovery are on the record.
     Health {
@@ -351,6 +374,30 @@ mod tests {
         assert!(matches!(
             serde_json::from_str::<StreamEvent>(old).unwrap(),
             StreamEvent::Health { .. }
+        ));
+    }
+
+    #[test]
+    fn recall_receipt_round_trips_and_its_lists_are_optional() {
+        let ev = StreamEvent::Recall {
+            ts_ms: 5,
+            facts: vec!["f_1".into()],
+            habits: vec!["p_1".into()],
+            episodes: vec!["ep_1".into()],
+            viewers: vec!["v42".into()],
+            moments: Vec::new(),
+        };
+        let line = serde_json::to_string(&ev).unwrap();
+        assert_eq!(
+            line,
+            r#"{"type":"recall","ts_ms":5,"facts":["f_1"],"habits":["p_1"],"episodes":["ep_1"],"viewers":["v42"]}"#
+        );
+        let back: StreamEvent = serde_json::from_str(&line).unwrap();
+        assert_eq!(serde_json::to_string(&back).unwrap(), line);
+        let bare = r#"{"type":"recall","ts_ms":9}"#;
+        assert!(matches!(
+            serde_json::from_str::<StreamEvent>(bare).unwrap(),
+            StreamEvent::Recall { facts, moments, .. } if facts.is_empty() && moments.is_empty()
         ));
     }
 }

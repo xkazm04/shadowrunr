@@ -383,6 +383,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
         | StreamEvent::Session { ts_ms, .. }
+        | StreamEvent::Recall { ts_ms, .. }
         | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms,
     }
@@ -567,6 +568,21 @@ pub fn body(ev: &StreamEvent) -> String {
                 .as_ref()
                 .map(|d| format!(": {}", clip(d, 160)))
                 .unwrap_or_default()
+        ),
+        StreamEvent::Recall {
+            facts,
+            habits,
+            episodes,
+            viewers,
+            moments,
+            ..
+        } => format!(
+            "recall {} facts, {} habits, {} episodes, {} viewers, {} moments",
+            facts.len(),
+            habits.len(),
+            episodes.len(),
+            viewers.len(),
+            moments.len()
         ),
         StreamEvent::Session { kind, detail, .. } => format!(
             "session {}{}",

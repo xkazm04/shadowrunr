@@ -67,5 +67,6 @@ export const EVENT_TYPES = exhaustive<EventType>()([
   "beat_plan",
   "health",
   "session",
+  "recall",
   "stream_end",
 ] as const);
