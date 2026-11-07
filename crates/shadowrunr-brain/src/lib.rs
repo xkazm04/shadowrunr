@@ -396,7 +396,9 @@ impl Brain {
             guest_closes: Default::default(),
             scene_budget,
             orch: Box::new(
-                Orchestrator::new(salt).with_character(tuning.tuning, cfg.character.lines.clone()),
+                Orchestrator::new(salt)
+                    .with_character(tuning.tuning, cfg.character.lines.clone())
+                    .with_effects(&cfg.character.effects),
             ),
             beat_clock: tokio::time::Instant::now(),
             hexes: Vec::new(),
@@ -1490,8 +1492,14 @@ impl Brain {
             &pkg.persona,
         )
         .and_then(|tags| {
+            // A care beat gets the care effect alone: no duty's effect.
+            let seg = orchestrate::segment_wire(ctx.segment);
+            let source = plan
+                .source
+                .filter(|_| tags != ["care"])
+                .map(|s| (s.as_str(), seg.as_str()));
             self.working
-                .voice_section(&pkg.effects, &tags, &picked_names)
+                .voice_section_for(&pkg.effects, source, &tags, &picked_names)
         });
         let waves_now = self.orch.question_waves().clone();
         let prompt = compose_turn(&TurnInputs {

@@ -289,11 +289,40 @@ impl WorkingSet {
         situations: &[&str],
         names: &[String],
     ) -> Option<String> {
-        let chosen: Vec<&Effect> = situations
-            .iter()
-            .filter_map(|tag| effects.iter().find(|e| e.tag == *tag))
-            .take(EFFECTS_PER_BEAT)
-            .collect();
+        self.voice_section_for(effects, None, situations, names)
+    }
+
+    /// [`Self::voice_section`] for a beat whose duty is `source` (a beat source's wire name and
+    /// the segment's): the package's effects for that source come first (one for this segment
+    /// before one for any), then the situations' effects, within [`EFFECTS_PER_BEAT`]. A
+    /// source effect that names a tag applies only when that situation is the beat's. With no
+    /// source effect in the package, the section is the situational one, byte for byte.
+    pub fn voice_section_for(
+        &mut self,
+        effects: &[Effect],
+        source: Option<(&str, &str)>,
+        situations: &[&str],
+        names: &[String],
+    ) -> Option<String> {
+        let mut chosen: Vec<&Effect> = Vec::new();
+        if let Some((src, seg)) = source {
+            let mut by_source: Vec<&Effect> = effects
+                .iter()
+                .filter(|e| {
+                    e.source.as_deref() == Some(src)
+                        && e.segment.as_deref().is_none_or(|s| s == seg)
+                        && (e.tag.is_empty() || situations.contains(&e.tag.as_str()))
+                })
+                .collect();
+            by_source.sort_by_key(|e| e.segment.is_none());
+            chosen.extend(by_source);
+        }
+        chosen.extend(
+            situations
+                .iter()
+                .filter_map(|tag| effects.iter().find(|e| e.source.is_none() && e.tag == *tag)),
+        );
+        chosen.truncate(EFFECTS_PER_BEAT);
         let heard: Vec<String> = self.heard.iter().cloned().collect();
         let worn = worn_phrases(&heard, TIC_MIN_LINES, TIC_MAX_SHOWN);
         let mut all_names: Vec<String> = names.to_vec();
@@ -640,6 +669,7 @@ mod tests {
         Effect {
             tag: tag.into(),
             text: format!("the {tag} effect"),
+            ..Default::default()
         }
     }
 

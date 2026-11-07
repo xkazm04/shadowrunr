@@ -31,8 +31,15 @@ fn beat_plans(ev: &[StreamEvent]) -> Vec<BeatRow> {
                 bit_id,
                 picks,
                 reason,
+                source,
                 ..
-            } => Some((*mode, bit_id.clone(), *picks, reason.clone())),
+            } => {
+                assert!(
+                    source.is_some(),
+                    "every beat_plan names its source: {reason}"
+                );
+                Some((*mode, bit_id.clone(), *picks, reason.clone()))
+            }
             _ => None,
         })
         .collect()

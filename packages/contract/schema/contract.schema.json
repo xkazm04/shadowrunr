@@ -155,6 +155,76 @@
         }
       ]
     },
+    "BeatSource": {
+      "description": "What a beat's lines are for: the duty that drove it (`StreamEvent::BeatPlan`). One per beat,\nthe most specific that applies; the key humour is measured and directed by (a package effect\nmay name one, `effects.toml`).",
+      "oneOf": [
+        {
+          "const": "chat",
+          "description": "Answering picked chat (a react, or chat folded into the segment).",
+          "type": "string"
+        },
+        {
+          "const": "case_move",
+          "description": "The case's next move (SEG-02A): dispatch, reveal, string or record on screen.",
+          "type": "string"
+        },
+        {
+          "const": "purpose",
+          "description": "The segment's state purpose pushed this beat.",
+          "type": "string"
+        },
+        {
+          "const": "cta",
+          "description": "A call to action: a purpose or connector that asks the room to act (a chat command, a\npoll).",
+          "type": "string"
+        },
+        {
+          "const": "room_event",
+          "description": "A room event announced: a vote closed, a handover due, a scene aside.",
+          "type": "string"
+        },
+        {
+          "const": "welcome",
+          "description": "A welcome: a first contact greeted, a raid, a gathering line.",
+          "type": "string"
+        },
+        {
+          "const": "bit",
+          "description": "A prepared bit voiced.",
+          "type": "string"
+        },
+        {
+          "const": "bridge",
+          "description": "A connector or a through-line bridge.",
+          "type": "string"
+        },
+        {
+          "const": "cold_open",
+          "description": "The cold open's prepared story.",
+          "type": "string"
+        },
+        {
+          "const": "scene",
+          "description": "SEG-03: a scene's lines.",
+          "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "No call: a speech hold or a quiet hold.",
+          "type": "string"
+        },
+        {
+          "const": "care",
+          "description": "A care beat: a disclosure or a sincerely sad viewer. Never carries a source effect.",
+          "type": "string"
+        },
+        {
+          "const": "improvise",
+          "description": "A quiet beat filled in his own words.",
+          "type": "string"
+        }
+      ]
+    },
     "BesideCell": {
       "description": "A cell measured by a different instrument slice: reported with its own n, never ranked.",
       "properties": {
@@ -9471,6 +9541,10 @@
             },
             "reason": {
               "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/BeatSource",
+              "description": "What the beat's lines are for (the duty that drove it). Omitted by older\ntranscripts: a reader classifies those from `reason`."
             },
             "ts_ms": {
               "format": "int64",

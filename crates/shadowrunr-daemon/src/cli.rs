@@ -340,6 +340,25 @@ pub enum SimCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Deterministic tables mined from existing judged runs (no engine, no quota).
+    #[command(subcommand)]
+    Mine(MineCommand),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MineCommand {
+    /// humor_landed by beat source (case move, purpose, call to action, welcome, room event,
+    /// chat ...), per instrument hash, from the judged runs under DIR. Refuses runs of several
+    /// hashes unless --hash picks one, and a table over 10% unclassified.
+    HumorBySource {
+        dir: PathBuf,
+        /// The instrument hash to read (a prefix of 8 or more characters will do).
+        #[arg(long)]
+        hash: Option<String>,
+        /// Print the table as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// `shadowrunr sim tournament` exit codes (also in docs/spec/contract.md, WP13 appendix).
@@ -553,6 +572,9 @@ pub async fn run(cmd: Command, cfg: Config) -> Result<ExitCode, String> {
         Command::Sim(SimCommand::Run(a)) => sim_run(&cfg, a).await,
         Command::Sim(SimCommand::Tournament(a)) => sim_tournament(&cfg, a).await,
         Command::Sim(SimCommand::Summarize { dir, json }) => sim_summarize(&from_cwd(&dir), json),
+        Command::Sim(SimCommand::Mine(MineCommand::HumorBySource { dir, hash, json })) => {
+            sim_mine_humor(&from_cwd(&dir), hash.as_deref(), json)
+        }
         Command::Reconcile {
             tournament,
             dry_run: true,
@@ -1636,6 +1658,17 @@ async fn sim_tournament(cfg: &Config, a: TournamentArgs) -> Result<ExitCode, Str
     .await;
     print_json(&report);
     Ok(ExitCode::from(exit_code))
+}
+
+/// `sim mine humor-by-source`: the table, or why it is refused.
+fn sim_mine_humor(dir: &Path, hash: Option<&str>, json: bool) -> Result<ExitCode, String> {
+    let t = shadowrunr_sim::mine::humor_by_source(dir, hash).map_err(|e| e.to_string())?;
+    if json {
+        print_json(&t);
+    } else {
+        print!("{}", t.render());
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn sim_summarize(dir: &Path, json: bool) -> Result<ExitCode, String> {

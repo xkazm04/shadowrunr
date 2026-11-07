@@ -284,6 +284,10 @@ pub enum StreamEvent {
         /// Chat messages passed to the voice this beat.
         picks: u32,
         reason: String,
+        /// What the beat's lines are for (the duty that drove it). Omitted by older
+        /// transcripts: a reader classifies those from `reason`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<crate::prep::BeatSource>,
     },
     /// The brain's view of the engine fleet changed (WP sandbox): written on every
     /// transition, so an outage and its recovery are on the record.

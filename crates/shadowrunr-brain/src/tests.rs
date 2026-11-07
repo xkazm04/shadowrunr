@@ -22,6 +22,7 @@ mod orchestration;
 mod pace;
 mod persona;
 mod scene;
+mod sources;
 
 // ── Test double ────────────────────────────────────────────────────────
 

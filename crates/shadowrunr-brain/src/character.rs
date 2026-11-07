@@ -590,13 +590,38 @@ pub const EFFECT_TAGS: &[&str] = &[
 /// The longest effect text, in characters.
 pub const EFFECT_MAX_CHARS: usize = 200;
 
-/// One `[[effect]]` of `effects.toml`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// One `[[effect]]` of `effects.toml`. A situational effect names a `tag`. From version 2 an
+/// effect may name a beat `source` instead (or besides: then both must match), optionally for
+/// one `segment` only: the duty a beat carries out ([`shadowrunr_types::prep::BeatSource`]), so a
+/// line the engine asks for (a case move, a purpose push, a call to action, a welcome) gets the
+/// package's effect for that duty.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Effect {
+    /// The situation tag ([`EFFECT_TAGS`]); empty for a source effect that applies in any.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tag: String,
+    /// The beat source it applies to (its wire name, `case_move`), version 2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// The segment it applies in (its wire name, `SEG-02A`), version 2, with a source only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment: Option<String>,
     pub text: String,
 }
+
+/// The beat sources an effect may never name: a care beat drops the act (its effect is the
+/// `care` tag), and a hold says nothing.
+pub const EFFECT_SOURCES_NEVER: &[shadowrunr_types::prep::BeatSource] = &[
+    shadowrunr_types::prep::BeatSource::Care,
+    shadowrunr_types::prep::BeatSource::Hold,
+];
+
+/// Characters an effect's text never carries: double quotes of any kind (an effect carries no
+/// quoted wording to copy).
+const EFFECT_QUOTES: &[char] = &[
+    '"', '\u{201C}', '\u{201D}', '\u{201E}', '\u{00AB}', '\u{00BB}',
+];
 
 /// `effects.toml` as written.
 #[derive(Debug, Clone, Deserialize)]
@@ -607,24 +632,88 @@ struct EffectsFile {
     effects: Vec<Effect>,
 }
 
-/// Parse and check `effects.toml`: version 1, every tag known and used once, every text
-/// non-empty, at most [`EFFECT_MAX_CHARS`] characters and with known placeholders. Returns the
-/// effects with placeholders filled for `persona`, in file order.
+/// Parse and check `effects.toml`: version 1 or 2, every tag known and used once among the
+/// situational effects, every source (version 2) a known beat source a beat may carry an
+/// effect for, its segment a known segment and each (source, segment, tag) used once; every
+/// text non-empty, at most [`EFFECT_MAX_CHARS`] characters, with no double quotes and with
+/// known placeholders. Returns the effects with placeholders filled for `persona`, in file
+/// order.
 pub fn parse_effects(text: &str, persona: &Persona) -> Result<Vec<Effect>, PackageIssue> {
     let f: EffectsFile = toml::from_str(text)
         .map_err(|e| issue(EFFECTS_FILE, toml_error_key(text, &e), e.message().trim()))?;
-    if f.version != 1 {
+    if !matches!(f.version, 1 | 2) {
         return Err(issue(
             EFFECTS_FILE,
             "version",
-            format!("{} is not a known version (1)", f.version),
+            format!("{} is not a known version (1, 2)", f.version),
         ));
     }
     let mut seen = std::collections::HashSet::new();
+    let mut seen_sources = std::collections::HashSet::new();
     let mut out = Vec::with_capacity(f.effects.len());
     for (i, e) in f.effects.iter().enumerate() {
         let key = |k: &str| format!("effect[{i}].{k}");
-        if !EFFECT_TAGS.contains(&e.tag.as_str()) {
+        if let Some(src) = &e.source {
+            if f.version < 2 {
+                return Err(issue(
+                    EFFECTS_FILE,
+                    key("source"),
+                    "a source effect needs version 2",
+                ));
+            }
+            match shadowrunr_types::prep::BeatSource::parse(src) {
+                Some(b) if !EFFECT_SOURCES_NEVER.contains(&b) => {}
+                _ => {
+                    let known: Vec<&str> = shadowrunr_types::prep::BeatSource::ALL
+                        .iter()
+                        .filter(|b| !EFFECT_SOURCES_NEVER.contains(b))
+                        .map(|b| b.as_str())
+                        .collect();
+                    return Err(issue(
+                        EFFECTS_FILE,
+                        key("source"),
+                        format!("unknown source {src:?} (known: {})", known.join(", ")),
+                    ));
+                }
+            }
+            if let Some(seg) = &e.segment {
+                let known: Result<shadowrunr_types::SegmentId, _> =
+                    serde_json::from_value(serde_json::Value::String(seg.clone()));
+                if known.is_err() {
+                    return Err(issue(
+                        EFFECTS_FILE,
+                        key("segment"),
+                        format!("unknown segment {seg:?}"),
+                    ));
+                }
+            }
+            if !e.tag.is_empty() && !EFFECT_TAGS.contains(&e.tag.as_str()) {
+                return Err(issue(
+                    EFFECTS_FILE,
+                    key("tag"),
+                    format!(
+                        "unknown tag {:?} (known: {})",
+                        e.tag,
+                        EFFECT_TAGS.join(", ")
+                    ),
+                ));
+            }
+            if !seen_sources.insert((src.as_str(), e.segment.as_deref(), e.tag.as_str())) {
+                return Err(issue(
+                    EFFECTS_FILE,
+                    key("source"),
+                    format!(
+                        "{src:?} is repeated for the same segment and tag (one effect per key)"
+                    ),
+                ));
+            }
+        } else if e.segment.is_some() {
+            return Err(issue(
+                EFFECTS_FILE,
+                key("segment"),
+                "a segment applies only with a source",
+            ));
+        } else if !EFFECT_TAGS.contains(&e.tag.as_str()) {
             return Err(issue(
                 EFFECTS_FILE,
                 key("tag"),
@@ -634,8 +723,7 @@ pub fn parse_effects(text: &str, persona: &Persona) -> Result<Vec<Effect>, Packa
                     EFFECT_TAGS.join(", ")
                 ),
             ));
-        }
-        if !seen.insert(e.tag.as_str()) {
+        } else if !seen.insert(e.tag.as_str()) {
             return Err(issue(
                 EFFECTS_FILE,
                 key("tag"),
@@ -645,6 +733,13 @@ pub fn parse_effects(text: &str, persona: &Persona) -> Result<Vec<Effect>, Packa
         let t = e.text.trim();
         if t.is_empty() {
             return Err(issue(EFFECTS_FILE, key("text"), "must not be empty"));
+        }
+        if t.contains(EFFECT_QUOTES) {
+            return Err(issue(
+                EFFECTS_FILE,
+                key("text"),
+                "carries a double quote: an effect says what a line achieves, never its wording",
+            ));
         }
         let n = t.chars().count();
         if n > EFFECT_MAX_CHARS {
@@ -666,6 +761,8 @@ pub fn parse_effects(text: &str, persona: &Persona) -> Result<Vec<Effect>, Packa
         }
         out.push(Effect {
             tag: e.tag.clone(),
+            source: e.source.clone(),
+            segment: e.segment.clone(),
             text: persona.fill(t),
         });
     }
@@ -1609,9 +1706,48 @@ mod tests {
             |tag: &str, text: &str| format!("[[effect]]\ntag = \"{tag}\"\ntext = \"{text}\"\n");
         let cases = [
             (
-                "version = 2\n".to_string(),
+                "version = 3\n".to_string(),
                 "version",
                 "not a known version",
+            ),
+            // Version 2: an effect keyed by a beat source (and a segment).
+            (
+                format!("{head}[[effect]]\nsource = \"case_move\"\ntext = \"x\"\n"),
+                "effect[0].source",
+                "needs version 2",
+            ),
+            (
+                "version = 2\n[[effect]]\nsource = \"gossip\"\ntext = \"x\"\n".to_string(),
+                "effect[0].source",
+                "unknown source \"gossip\"",
+            ),
+            (
+                "version = 2\n[[effect]]\nsource = \"care\"\ntext = \"x\"\n".to_string(),
+                "effect[0].source",
+                "unknown source \"care\"",
+            ),
+            (
+                "version = 2\n[[effect]]\nsource = \"purpose\"\nsegment = \"SEG-99\"\ntext = \"x\"\n"
+                    .to_string(),
+                "effect[0].segment",
+                "unknown segment",
+            ),
+            (
+                "version = 2\n[[effect]]\ntag = \"quiet\"\nsegment = \"SEG-01\"\ntext = \"x\"\n"
+                    .to_string(),
+                "effect[0].segment",
+                "only with a source",
+            ),
+            (
+                "version = 2\n[[effect]]\nsource = \"cta\"\ntext = \"x\"\n[[effect]]\nsource = \"cta\"\ntext = \"y\"\n"
+                    .to_string(),
+                "effect[1].source",
+                "repeated",
+            ),
+            (
+                format!("{head}[[effect]]\ntag = \"quiet\"\ntext = 'Say \"hi\" twice.'\n"),
+                "effect[0].text",
+                "double quote",
             ),
             (
                 format!("{head}{}", eff("cheese", "x")),
@@ -1661,6 +1797,14 @@ mod tests {
         .unwrap();
         assert_eq!(ok[0].text, "Warm, viewers.");
         assert_eq!(ok.len(), 2);
+        // A source effect, for one segment or any, beside a situational one of the same tag.
+        let v2 = parse_effects(
+            "version = 2\n[[effect]]\ntag = \"quiet\"\ntext = \"q\"\n[[effect]]\nsource = \"purpose\"\ntag = \"quiet\"\ntext = \"p\"\n[[effect]]\nsource = \"purpose\"\nsegment = \"SEG-02A\"\ntext = \"s\"\n",
+            &p,
+        )
+        .unwrap();
+        assert_eq!(v2.len(), 3);
+        assert_eq!(v2[2].segment.as_deref(), Some("SEG-02A"));
 
         for (text, key) in [
             ("budget_chars = 79\nmax_sentences = 2\n", "budget_chars"),

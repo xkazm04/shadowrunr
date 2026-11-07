@@ -13,7 +13,18 @@ use crate::orchestrate::REQUEST_ANSWER_MS;
 fn plan_of(ev: &[StreamEvent]) -> (BeatMode, String) {
     ev.iter()
         .find_map(|e| match e {
-            StreamEvent::BeatPlan { mode, reason, .. } => Some((*mode, reason.clone())),
+            StreamEvent::BeatPlan {
+                mode,
+                reason,
+                source,
+                ..
+            } => {
+                assert!(
+                    source.is_some(),
+                    "every beat_plan names its source: {reason}"
+                );
+                Some((*mode, reason.clone()))
+            }
             _ => None,
         })
         .expect("a beat_plan")

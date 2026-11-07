@@ -205,6 +205,15 @@ impl Engine for CaseModel {
     }
 }
 
+/// The brain's call-to-action commands are the segments' chat commands.
+#[test]
+fn the_brains_call_to_action_commands_are_the_segments_chat_commands() {
+    assert_eq!(
+        shadowrunr_brain::orchestrate::CTA_COMMANDS,
+        shadowrunr_segments::table::COMMAND_NAMES
+    );
+}
+
 /// Distinct questions to the host, so no two collapse into a wave.
 const QUESTIONS: &[&str] = &[
     "@Malakor what do the bone-clerks eat on a night shift?",
@@ -379,6 +388,19 @@ async fn a_busy_seg02a_run_still_works_the_case() {
     let dispatched = ops_at(ev, |o| matches!(o, Op::DispatchResearch { .. }));
     let revealed = ops_at(ev, |o| matches!(o, Op::RevealHex { .. }));
     let beats = case_beats(ev);
+    // Every beat names its source; a case beat is a case move.
+    for e in ev {
+        if let StreamEvent::BeatPlan { reason, source, .. } = e {
+            let source = source.unwrap_or_else(|| panic!("a beat_plan with no source: {reason}"));
+            if reason.starts_with("case: ") {
+                assert_eq!(
+                    source,
+                    shadowrunr_types::prep::BeatSource::CaseMove,
+                    "{reason}"
+                );
+            }
+        }
+    }
     eprintln!(
         "case beats at {beats:?}; dispatches at {dispatched:?}; reveals at {revealed:?}; cards \
          face up {}; strings {}",

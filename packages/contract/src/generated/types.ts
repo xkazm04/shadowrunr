@@ -512,6 +512,7 @@ export type StreamEvent =
        */
       picks: number;
       reason: string;
+      source?: BeatSource;
       ts_ms: number;
       type: "beat_plan";
     }
@@ -701,6 +702,28 @@ export type ModStage = "input" | "output";
  * via the `definition` "BeatMode".
  */
 export type BeatMode = "cold_open" | "react" | "bit" | "bridge" | "mixed" | "hold" | "improvise" | "scene";
+/**
+ * What a beat's lines are for: the duty that drove it (`StreamEvent::BeatPlan`). One per beat,
+ * the most specific that applies; the key humour is measured and directed by (a package effect
+ * may name one, `effects.toml`).
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "BeatSource".
+ */
+export type BeatSource =
+  | "chat"
+  | "case_move"
+  | "purpose"
+  | "cta"
+  | "room_event"
+  | "welcome"
+  | "bit"
+  | "bridge"
+  | "cold_open"
+  | "scene"
+  | "hold"
+  | "care"
+  | "improvise";
 /**
  * The brain's fleet mode as recorded by [`StreamEvent::Health`].
  *

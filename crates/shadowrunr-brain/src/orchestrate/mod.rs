@@ -151,7 +151,7 @@ mod tests;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use shadowrunr_types::prep::{BeatMode, BitKind, ConnectorKind, PrepBit, StreamPrep};
+use shadowrunr_types::prep::{BeatMode, BeatSource, BitKind, ConnectorKind, PrepBit, StreamPrep};
 use shadowrunr_types::{ChatMsg, Command, SegmentContext, StreamEvent, TsMs};
 
 use crate::character::LineBank;
@@ -215,6 +215,21 @@ and tie your reply back to the segment (its rules and state above); do not start
 /// The segment directive that advances the current state's purpose (`{purpose}` filled).
 pub const PURPOSE_NOTE: &str = "Advance the segment this beat, toward the state's purpose: \
 {purpose}";
+/// The chat commands a segment may accept (`shadowrunr-segments` `COMMAND_NAMES`; the sim's
+/// tests hold the two lists equal): a line naming one (`!hint`) is a call to action.
+pub const CTA_COMMANDS: [&str; 5] = ["summon", "hint", "grade", "propose", "vote"];
+/// The call-to-action key of a line asking the room to choose ("which card next?").
+pub const CTA_CHOOSE: &str = "choose";
+/// A call to action that aired is not made again for this long while the segment's state is
+/// unchanged (assumption: about 18 beats; a CTA line every 90 s was the measured pattern, 67 of
+/// 670 host lines in credit-seg02a-1998a8a03d).
+pub const CTA_COOLDOWN_MS: i64 = 90_000;
+/// While a call to action cools down, the beat's segment directive says so (`{asks}` filled).
+pub const CTA_NOTE: &str = "You already asked chat for {asks} a moment ago and the state has not changed: do not ask again this beat; play what they sent.";
+/// An unchanged state's purpose is pushed ([`PURPOSE_NOTE`]) at most once in this many beats
+/// (assumption: so 24 beats of one state push it at most 3 times; it was pushed on every
+/// improvised or mixed beat).
+pub const PURPOSE_SPACING_BEATS: u64 = 8;
 /// First contacts in one beat that count as a raid (the room changed).
 pub const RAID_FIRST_CONTACTS: usize = 5;
 /// During a scene, first contacts arriving across beats this close together count toward a
@@ -358,6 +373,10 @@ pub struct Plan {
     off_topic: bool,
     /// The beat's pick is an owned request: it takes the beat (no through-line directive).
     owed: bool,
+    /// The state purpose this beat pushes ([`PURPOSE_NOTE`]), if any.
+    purpose: Option<String>,
+    /// What the beat's lines are for, set when the beat is committed.
+    pub source: Option<BeatSource>,
 }
 
 impl Plan {
@@ -382,6 +401,8 @@ impl Plan {
             only: None,
             off_topic: false,
             owed: false,
+            purpose: None,
+            source: None,
         }
     }
 
@@ -591,6 +612,17 @@ pub struct Orchestrator {
     /// Kept apart from the carry: a call superseded there by its viewer's older bait is still
     /// owed.
     brigade_owed: Vec<(TsMs, Candidate)>,
+    /// The segment, state and open polls this beat: a call to action cools down while it is
+    /// unchanged ([`CTA_COOLDOWN_MS`]).
+    state_key: String,
+    /// Calls to action that aired, by command ([`CTA_COMMANDS`], [`CTA_CHOOSE`]): when, and the
+    /// state they were made in.
+    cta: HashMap<String, (TsMs, String)>,
+    /// The last purpose push ([`PURPOSE_NOTE`]): the state it pushed and the beat number.
+    purpose_pushed: Option<(String, u64)>,
+    /// The segments of the package's tagless `case_move` effects (`None`: any segment): where
+    /// the engine's [`case::CASE_JOKE`] gives way to the package's wording.
+    case_effects: Vec<Option<String>>,
 }
 
 /// The situational ask an owned request makes: a single message (never a wave or a safety
@@ -752,6 +784,88 @@ fn chat_head(o: &ChatOffer) -> String {
     )
 }
 
+/// A segment's wire name (`SEG-02A`), as serde writes it.
+pub fn segment_wire(id: shadowrunr_types::SegmentId) -> String {
+    serde_json::to_value(id)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// The calls to action a line makes: each chat command it names (`!hint` -> `hint`), and
+/// [`CTA_CHOOSE`] when it asks the room to choose (a question with which, choose, pick, decide
+/// or vote in it).
+pub fn cta_keys(line: &str) -> Vec<&'static str> {
+    let lower = line.to_lowercase();
+    let mut out: Vec<&'static str> = CTA_COMMANDS
+        .iter()
+        .copied()
+        .filter(|c| {
+            lower.match_indices(&format!("!{c}")).any(|(at, m)| {
+                !lower[at + m.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(char::is_alphanumeric)
+            })
+        })
+        .collect();
+    let asks = lower.contains('?')
+        && lower
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|w| matches!(w, "which" | "choose" | "pick" | "decide" | "vote"));
+    if asks {
+        out.push(CTA_CHOOSE);
+    }
+    out
+}
+
+/// The source of a beat from a transcript written before `beat_plan` carried one: classified
+/// from its mode, pick count and reason string as the orchestrator writes them. `None` when
+/// the reason names no duty this knows (a reader reports it unclassified). Old reasons do not
+/// tell a purpose push from a plain improvised line, nor a call to action from a purpose.
+pub fn source_from_reason(mode: BeatMode, picks: u32, reason: &str) -> Option<BeatSource> {
+    let r = reason;
+    let has = |w: &str| r.contains(w);
+    Some(if mode == BeatMode::Hold {
+        BeatSource::Hold
+    } else if has("safety beat") || has("care beat") {
+        BeatSource::Care
+    } else if has("announce ") || has("for one aside") {
+        BeatSource::RoomEvent
+    } else if mode == BeatMode::Scene || has("scene ") {
+        BeatSource::Scene
+    } else if has("case: ") {
+        BeatSource::CaseMove
+    } else if has("gathering") || has("first contact") {
+        BeatSource::Welcome
+    } else if has("the state's purpose") {
+        BeatSource::Purpose
+    } else if mode == BeatMode::ColdOpen || has("cold open") {
+        BeatSource::ColdOpen
+    } else if has("bridge into_poll") {
+        BeatSource::Cta
+    } else if mode == BeatMode::Bit
+        || ["premise ", "story ", "callback "]
+            .iter()
+            .any(|k| has(&format!(": {k}")) || has(&format!(", {k}")))
+    {
+        BeatSource::Bit
+    } else if mode == BeatMode::Bridge || has("bridge") || has("bridged from the") {
+        BeatSource::Bridge
+    } else if picks > 0
+        || has("segment+chat")
+        || has("segment+off-topic")
+        || has("the request takes the beat")
+        || has("tied back")
+    {
+        BeatSource::Chat
+    } else if has("improvised") {
+        BeatSource::Improvise
+    } else {
+        return None;
+    })
+}
+
 fn kind_label(k: BitKind) -> &'static str {
     match k {
         BitKind::Premise => "premise",
@@ -809,6 +923,19 @@ impl Orchestrator {
     pub fn with_character(mut self, tuning: Tuning, lines: LineBank) -> Self {
         self.tuning = tuning;
         self.lines = lines;
+        self
+    }
+
+    /// The package's effects: a tagless `case_move` effect replaces the engine's comic contract
+    /// in the case directive, for its segment (or every one).
+    pub fn with_effects(mut self, effects: &[crate::character::Effect]) -> Self {
+        self.case_effects = effects
+            .iter()
+            .filter(|e| {
+                e.source.as_deref() == Some(BeatSource::CaseMove.as_str()) && e.tag.is_empty()
+            })
+            .map(|e| e.segment.clone())
+            .collect();
         self
     }
 
@@ -1205,6 +1332,106 @@ impl Orchestrator {
     /// His line went on air: the thread a pick-up ties back to.
     pub fn spoke(&mut self, line: &str) {
         self.agenda.spoke(line);
+        // Only what aired starts a cooldown: a call to action the pace gate trimmed never
+        // reaches here.
+        for k in cta_keys(line) {
+            self.cta
+                .insert(k.to_string(), (self.now_ms, self.state_key.clone()));
+        }
+    }
+
+    /// The calls to action cooling down this beat (made under [`CTA_COOLDOWN_MS`] ago in the
+    /// unchanged state), sorted.
+    pub fn cooling_ctas(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .cta
+            .iter()
+            .filter(|(_, (t, key))| {
+                *key == self.state_key && self.now_ms.saturating_sub(*t) < CTA_COOLDOWN_MS
+            })
+            .map(|(k, _)| k.clone())
+            .collect();
+        out.sort();
+        out
+    }
+
+    /// The purpose directive for this beat, if the state has a purpose and it is due: an
+    /// unchanged state's purpose is pushed once in [`PURPOSE_SPACING_BEATS`], and never while
+    /// a call to action it makes is cooling down. Records the push (staged with the beat).
+    fn purpose_note(&mut self, ctx: &SegmentContext) -> Option<(String, String)> {
+        let purpose = crate::topic::state_purpose(ctx)?;
+        if let Some((key, at)) = &self.purpose_pushed {
+            if *key == self.state_key && self.beats.saturating_sub(*at) < PURPOSE_SPACING_BEATS {
+                return None;
+            }
+        }
+        let cooling = self.cooling_ctas();
+        if cta_keys(&purpose)
+            .iter()
+            .any(|k| cooling.iter().any(|c| c == k))
+        {
+            return None;
+        }
+        self.purpose_pushed = Some((self.state_key.clone(), self.beats));
+        Some((
+            PURPOSE_NOTE.replace("{purpose}", &one_line(&purpose, 300)),
+            purpose,
+        ))
+    }
+
+    /// What a committed beat's lines are for: the most specific duty that drove it.
+    fn source_of(&self, plan: &Plan, pick: &Pick) -> BeatSource {
+        if plan.mode == BeatMode::Hold {
+            return BeatSource::Hold;
+        }
+        if plan.offer == Offer::Care
+            || pick.chosen.iter().any(|c| {
+                c.safety.is_some() || situational_asks(&c.msg.text).iter().any(|a| a.is_care())
+            })
+        {
+            return BeatSource::Care;
+        }
+        if matches!(plan.offer, Offer::Aside { .. }) || plan.room_note.is_some() {
+            return BeatSource::RoomEvent;
+        }
+        if plan.mode == BeatMode::Scene {
+            return BeatSource::Scene;
+        }
+        if plan.case.is_some() {
+            return BeatSource::CaseMove;
+        }
+        if plan.note.as_deref() == Some(GATHERING_NOTE)
+            || pick.chosen.iter().any(|c| self.first.contains(&c.msg.id))
+        {
+            return BeatSource::Welcome;
+        }
+        if let Some(p) = &plan.purpose {
+            return if cta_keys(p).is_empty() {
+                BeatSource::Purpose
+            } else {
+                BeatSource::Cta
+            };
+        }
+        if plan.mode == BeatMode::ColdOpen {
+            return BeatSource::ColdOpen;
+        }
+        if plan
+            .material
+            .as_deref()
+            .is_some_and(|m| m.starts_with("Connector (into_poll)"))
+        {
+            return BeatSource::Cta;
+        }
+        if plan.bit_id.is_some() {
+            return BeatSource::Bit;
+        }
+        if plan.mode == BeatMode::Bridge || plan.reason.contains("bridged from the") {
+            return BeatSource::Bridge;
+        }
+        if !pick.chosen.is_empty() {
+            return BeatSource::Chat;
+        }
+        BeatSource::Improvise
     }
 
     /// The open loops, for diagnostics ("research r1 (…), the vote \"…\"").
@@ -1519,6 +1746,18 @@ impl Orchestrator {
     /// open, safety, a room event and the goodbye gets its pick-up and lead-in ([`agenda`]).
     pub fn plan(&mut self, b: &BeatInputs<'_>) -> Plan {
         self.now_ms = b.now_ms;
+        self.state_key = {
+            let mut polls: Vec<&str> = self
+                .room
+                .open_polls()
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect();
+            polls.sort_unstable();
+            format!("{:?}/{}/{}", b.ctx.segment, b.ctx.state, polls.join(","))
+        };
+        let key = self.state_key.clone();
+        self.cta.retain(|_, (_, k)| *k == key);
         self.case_next = self.case.next_move(b.ctx, b.now_ms);
         let case_loop: Vec<(String, String)> = self
             .case_next
@@ -1558,6 +1797,29 @@ impl Orchestrator {
             p.reason.push_str(&format!("; owed: {}", ids.join(", ")));
         }
         let safety = b.cands.iter().any(|c| c.safety.is_some());
+        // A call to action still cooling down: the beat is told not to ask again.
+        let cooling = self.cooling_ctas();
+        if !cooling.is_empty()
+            && !safety
+            && !matches!(p.mode, BeatMode::Hold | BeatMode::Scene)
+            && p.offer != Offer::Care
+        {
+            let asks: Vec<String> = cooling
+                .iter()
+                .map(|k| {
+                    if k == CTA_CHOOSE {
+                        "a choice".to_string()
+                    } else {
+                        format!("!{k}")
+                    }
+                })
+                .collect();
+            let note = CTA_NOTE.replace("{asks}", &asks.join(", "));
+            p.segment_note = Some(match p.segment_note.take() {
+                Some(n) => format!("{}\n{note}", n.trim_end()),
+                None => note,
+            });
+        }
         if p.mode == BeatMode::Hold
             || p.mode == BeatMode::Scene
             || safety
@@ -1948,7 +2210,15 @@ impl Orchestrator {
         {
             let face_up = b.ctx.hexes.iter().filter(|h| !h.fog).count();
             let names = crate::case_names::CaseNames::read(b.ctx);
-            let directive = self.case.ask(&mv, face_up, &names, now);
+            // The package's own case_move effect, when it has one for this segment, replaces
+            // the engine's comic contract (it is said in the voice section).
+            let seg = segment_wire(b.ctx.segment);
+            let joke = (!self
+                .case_effects
+                .iter()
+                .any(|s| s.as_deref().is_none_or(|s| s == seg)))
+            .then_some(case::CASE_JOKE);
+            let directive = self.case.ask(&mv, face_up, &names, now, joke);
             let (mode, offer_kind, ceiling, with) = if chat > 0 {
                 (
                     BeatMode::React,
@@ -2191,8 +2461,9 @@ impl Orchestrator {
             0,
             format!("{lead}{label}, {why}: improvised"),
         );
-        if let Some(purpose) = crate::topic::state_purpose(b.ctx) {
-            p.segment_note = Some(PURPOSE_NOTE.replace("{purpose}", &one_line(&purpose, 300)));
+        if let Some((note, purpose)) = self.purpose_note(b.ctx) {
+            p.segment_note = Some(note);
+            p.purpose = Some(purpose);
         }
         p
     }
@@ -2250,7 +2521,7 @@ impl Orchestrator {
             p.segment_note = Some(note.trim_end().to_string());
             return p;
         }
-        if let Some(purpose) = crate::topic::state_purpose(b.ctx) {
+        if let Some((note, purpose)) = self.purpose_note(b.ctx) {
             let mut p = Plan::new(
                 BeatMode::Mixed,
                 Offer::Chat,
@@ -2258,7 +2529,8 @@ impl Orchestrator {
                 format!("{head}: the state's purpose"),
             )
             .with_chat(o);
-            p.segment_note = Some(PURPOSE_NOTE.replace("{purpose}", &one_line(&purpose, 300)));
+            p.segment_note = Some(note);
+            p.purpose = Some(purpose);
             return p;
         }
         let mut p = Plan::new(
@@ -2717,12 +2989,15 @@ impl Orchestrator {
         if plan.mode != BeatMode::Hold {
             self.last_voiced = Some(plan.mode);
         }
+        let source = self.source_of(plan, pick);
+        plan.source = Some(source);
         StreamEvent::BeatPlan {
             ts_ms: now_ms,
             mode: plan.mode,
             bit_id: plan.bit_id.clone(),
             picks: u32::try_from(pick.chosen.len()).unwrap_or(u32::MAX),
             reason: plan.reason.clone(),
+            source: Some(source),
         }
     }
 

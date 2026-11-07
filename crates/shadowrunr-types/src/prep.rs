@@ -173,9 +173,99 @@ pub enum BeatMode {
     Scene,
 }
 
+/// What a beat's lines are for: the duty that drove it (`StreamEvent::BeatPlan`). One per beat,
+/// the most specific that applies; the key humour is measured and directed by (a package effect
+/// may name one, `effects.toml`).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum BeatSource {
+    /// Answering picked chat (a react, or chat folded into the segment).
+    Chat,
+    /// The case's next move (SEG-02A): dispatch, reveal, string or record on screen.
+    CaseMove,
+    /// The segment's state purpose pushed this beat.
+    Purpose,
+    /// A call to action: a purpose or connector that asks the room to act (a chat command, a
+    /// poll).
+    Cta,
+    /// A room event announced: a vote closed, a handover due, a scene aside.
+    RoomEvent,
+    /// A welcome: a first contact greeted, a raid, a gathering line.
+    Welcome,
+    /// A prepared bit voiced.
+    Bit,
+    /// A connector or a through-line bridge.
+    Bridge,
+    /// The cold open's prepared story.
+    ColdOpen,
+    /// SEG-03: a scene's lines.
+    Scene,
+    /// No call: a speech hold or a quiet hold.
+    Hold,
+    /// A care beat: a disclosure or a sincerely sad viewer. Never carries a source effect.
+    Care,
+    /// A quiet beat filled in his own words.
+    Improvise,
+}
+
+impl BeatSource {
+    pub const ALL: [BeatSource; 13] = [
+        BeatSource::Chat,
+        BeatSource::CaseMove,
+        BeatSource::Purpose,
+        BeatSource::Cta,
+        BeatSource::RoomEvent,
+        BeatSource::Welcome,
+        BeatSource::Bit,
+        BeatSource::Bridge,
+        BeatSource::ColdOpen,
+        BeatSource::Scene,
+        BeatSource::Hold,
+        BeatSource::Care,
+        BeatSource::Improvise,
+    ];
+
+    /// The wire name (`case_move`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            BeatSource::Chat => "chat",
+            BeatSource::CaseMove => "case_move",
+            BeatSource::Purpose => "purpose",
+            BeatSource::Cta => "cta",
+            BeatSource::RoomEvent => "room_event",
+            BeatSource::Welcome => "welcome",
+            BeatSource::Bit => "bit",
+            BeatSource::Bridge => "bridge",
+            BeatSource::ColdOpen => "cold_open",
+            BeatSource::Scene => "scene",
+            BeatSource::Hold => "hold",
+            BeatSource::Care => "care",
+            BeatSource::Improvise => "improvise",
+        }
+    }
+
+    /// The source a wire name names.
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|b| b.as_str() == s)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn beat_source_wire_names_match_serde() {
+        for b in BeatSource::ALL {
+            assert_eq!(
+                serde_json::to_string(&b).unwrap(),
+                format!("\"{}\"", b.as_str())
+            );
+            assert_eq!(BeatSource::parse(b.as_str()), Some(b));
+        }
+    }
 
     #[test]
     fn wire_names() {

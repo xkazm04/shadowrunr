@@ -27,6 +27,7 @@ pub mod judge;
 pub mod judging;
 pub mod ledger;
 pub mod matrix;
+pub mod mine;
 pub mod outcome;
 pub mod pacing;
 pub mod population;

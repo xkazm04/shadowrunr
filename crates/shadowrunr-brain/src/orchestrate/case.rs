@@ -87,7 +87,10 @@ by what they said; then speak the case move.";
 /// lunarstake-help.example, a site the regulator's warning list names.", SEG-02A.a3.s1 L195;
 /// the judge: "the procedural dispatch lines (L437, L724, L845) with no joke",
 /// tuning-ee4dca5b/after SEG-02A.a300.s1).
-const CASE_JOKE: &str = "make that line a joke in your tone: one jab at the card, its \
+///
+/// The engine's neutral default: a package with a `case_move` effect (`effects.toml`, version
+/// 2) says it in its own words in the voice section instead, and the directive drops it.
+pub const CASE_JOKE: &str = "make that line a joke in your tone: one jab at the card, its \
 paperwork or the scheme, never at a person, and no fact the record does not give";
 /// The ops a case move may use: a segment offers the loop only with one of them on its menu
 /// and the case's cards in its context.
@@ -256,12 +259,18 @@ impl CaseMove {
     /// The per-turn directive, with the exact op line (`job` names a dispatch's job). Cards and
     /// records are named first and their ids follow in brackets (`names`): ids are for the op.
     pub fn directive(&self, job: &str, names: &CaseNames) -> String {
+        self.directive_with(job, names, Some(CASE_JOKE))
+    }
+
+    /// [`Self::directive`] with `joke` as the line's comic contract (`None`: the package's
+    /// `case_move` effect carries it, so the directive asks only for the line).
+    pub fn directive_with(&self, job: &str, names: &CaseNames, joke: Option<&str>) -> String {
         let head = "Advance the case this beat, before any chat:";
+        let jc = joke.map(|j| format!(", and {j}")).unwrap_or_default();
         let n = |id: &str| names.tagged(id);
         match self {
             CaseMove::Dispatch { hex, label, why } => format!(
-                "{head} send research to {}, {}. Say so in one short line, by name, and \
-                 {CASE_JOKE}; then put this action on its own line, exactly:\n{}",
+                "{head} send research to {}, {}. Say so in one short line, by name{jc}; then put this action on its own line, exactly:\n{}",
                 n(hex),
                 match why {
                     Why::Lead => "the lead chat hinted most",
@@ -276,7 +285,7 @@ impl CaseMove {
             ),
             CaseMove::Reveal { hex, grade, record } => format!(
                 "{head} the research on {} came back ({}, {}). Turn the card face up at that \
-                 grade and say what the record shows in one short line{}, and {CASE_JOKE}; then \
+                 grade and say what the record shows in one short line{}{jc}; then \
                  put this action on its own line, exactly:\n{}",
                 n(hex),
                 n(record),
@@ -298,7 +307,7 @@ impl CaseMove {
             } => format!(
                 "{head} {} is face up with {} on file and no string. Pin a string between that \
                  card and the face-up card the record connects it to (one of: {}), citing only \
-                 what the record says, and name the link in one short line, and {CASE_JOKE}. \
+                 what the record says, and name the link in one short line{jc}. \
                  {PIN_RELATION} The string reads \
                  as a sentence, from -> rel -> to: \"from\" is the card that acts (the regulator, \
                  the payer, the owner, the promoter), \"to\" the card it acts on. Put the action on \
@@ -316,8 +325,7 @@ impl CaseMove {
                 })
             ),
             CaseMove::Show { record } => format!(
-                "{head} put {} up on the browser and read from it in one short line, and \
-                 {CASE_JOKE}; put this action on its own line, exactly:\n{}",
+                "{head} put {} up on the browser and read from it in one short line{jc}; put this action on its own line, exactly:\n{}",
                 n(record),
                 op_line(&Op::ShowScreen {
                     screen: shadowrunr_types::ScreenId::Browser,
@@ -865,12 +873,13 @@ impl CaseDesk {
         face_up: usize,
         names: &CaseNames,
         now_ms: TsMs,
+        joke: Option<&str>,
     ) -> String {
         self.asks += 1;
         self.last_ask_ms = Some(now_ms);
         self.deferred = None;
         self.pending = Some((mv.clone(), face_up));
-        mv.directive(&format!("case-{}", self.asks), names)
+        mv.directive_with(&format!("case-{}", self.asks), names, joke)
     }
 }
 
@@ -996,7 +1005,7 @@ mod tests {
         );
         let mv = nm(&mut d, &c).unwrap();
         assert_eq!(mv.tag(), "dispatch HEX-03 (lead)");
-        let line = d.ask(&mv, 0, &CaseNames::read(&c), 0);
+        let line = d.ask(&mv, 0, &CaseNames::read(&c), 0, Some(CASE_JOKE));
         assert!(
             line.contains(
                 r#"OP: {"op":"dispatch_research","job_id":"case-1","brief":"HEX-03: what the records say about HEX-03 label"}"#
@@ -1084,7 +1093,7 @@ mod tests {
             record: "REP-01".into(),
         };
         assert!(d.due(&dispatch, 0), "the first move is due at once");
-        d.ask(&dispatch, 0, &CaseNames::default(), 0);
+        d.ask(&dispatch, 0, &CaseNames::default(), 0, Some(CASE_JOKE));
         assert!(!d.due(&dispatch, 5_000));
         assert!(d.due(&dispatch, CASE_RETRY_MS), "ignored: asked again");
         d.note_op(
@@ -1121,7 +1130,7 @@ mod tests {
         let c = ctx(cards(2), board);
         let mv = d.next_move(&c, 0).unwrap();
         assert_eq!(mv.tag(), "pin HEX-02 by CLM-01");
-        d.ask(&mv, 2, &CaseNames::read(&c), 0);
+        d.ask(&mv, 2, &CaseNames::read(&c), 0, Some(CASE_JOKE));
         // The model put the record up instead: the string waits; research is next.
         d.note_op(
             &Op::ShowScreen {
@@ -1142,9 +1151,9 @@ mod tests {
         let c = ctx(cards(2), "");
         let mv = d.next_move(&c, 10_000).unwrap();
         assert_eq!(mv.tag(), "dispatch HEX-03");
-        d.ask(&mv, 2, &CaseNames::read(&c), 10_000);
+        d.ask(&mv, 2, &CaseNames::read(&c), 10_000, Some(CASE_JOKE));
         assert_eq!(d.next_move(&c, 20_000).unwrap().tag(), "dispatch HEX-03");
-        d.ask(&mv, 2, &CaseNames::read(&c), 20_000);
+        d.ask(&mv, 2, &CaseNames::read(&c), 20_000, Some(CASE_JOKE));
         assert_eq!(d.next_move(&c, 30_000).unwrap().tag(), "dispatch HEX-04");
         assert_eq!(
             d.next_move(&c, 30_000 + CASE_BEAT_MS).unwrap().tag(),

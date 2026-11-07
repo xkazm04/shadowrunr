@@ -1784,6 +1784,18 @@ pub(crate) mod tests {
             events.iter().any(|e| matches!(e, StreamEvent::Say { .. })),
             "the brain spoke"
         );
+        // Every beat names its source, through the transcript and back.
+        let plans: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                StreamEvent::BeatPlan { source, reason, .. } => Some((source, reason)),
+                _ => None,
+            })
+            .collect();
+        assert!(!plans.is_empty());
+        for (source, reason) in plans {
+            assert!(source.is_some(), "a beat_plan with no source: {reason}");
+        }
         assert!(out.join("smoke/run.json").is_file());
         assert!(out.join("smoke/ledger.jsonl").is_file());
     }
