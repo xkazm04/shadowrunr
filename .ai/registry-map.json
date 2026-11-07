@@ -3119,7 +3119,11 @@
           "revision": 6,
           "changedAt": "2026-10-27",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/ui/Chip.tsx:28 The one status-to-tone table is keyed by a bare string, not a wire union. A new or misspelled member is never a compile error, so it gets the calm \"neutral\" tone even though the same table holds verdict members (pass/fail/held) whose unknown fallback should be the least-approved one. The State chip also prints the raw token, with underscores swapped for spaces, as its label.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:6a9ab99285e2cac0",
+          "evaluatedRevision": 6
         },
         {
           "subject": "chat-transcript",
