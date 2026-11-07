@@ -2342,7 +2342,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/source.test.tsx:18 The test named 'is the newest by updated_ms' puts the newest tournament first in the fixture, so a regression to 'take the first row' (or the controlled select falling back to its first option) still yields a-new and stays green; the newest-by-updated_ms decision in NoReport.tsx:20 is never what produces the asserted value, and the tie rule its comment describes is never exercised.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:a3c517733d58374b",
+          "evaluatedRevision": 29
         },
         {
           "subject": "agent-memory",

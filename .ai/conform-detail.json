@@ -8815,6 +8815,52 @@
         }
       ],
       "registryProposal": "permission-manifest-scoping is written around platform capability manifests (windows, webviews, extensions). Application-level network-egress allowlists that live in data files and can be overridden by operator config are a common variant the technique does not name. It should state whether an operator override may only narrow the committed list (subset check) or may replace it, because 'narrow or replace' wording turns the committed manifest into a default rather than a bound."
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/test-harness": {
+      "context": "console-reconcile-page",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-07",
+      "evaluatedTs": "2026-11-07T23:43:06.499Z",
+      "worker": "cc1492a3-5a76-414a-befd-0a0f7d092929",
+      "techniques": [
+        {
+          "technique": "unreached-decisions-pin-nothing",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/source.test.tsx:18 The fixture orders rows so 'first row' and 'newest' give the same answer. Only the 'last in name order' defect is distinguished. To fix, put the newest row in the middle or at the end with a smaller id."
+        },
+        {
+          "technique": "isolation-lanes",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/layer2.test.tsx:9 The module-level session singleton is reset before each test, and window.matchMedia is restored in a finally block (layer1.test.tsx:75), so no test inherits state from another."
+        },
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/inflight.test.tsx:27 The in-flight claim is proved by holding the reply open (a barrier) and counting reconcile.run calls. It never uses elapsed time; settle() yields to the event loop and the data layer runs on manualTimers."
+        },
+        {
+          "technique": "fixture-economics",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/testgen.ts:4 Cheap, parameterised generators (scale up to 10x) are typed against the generated contract. Replies also pass the real contractDoor through mountPage, so a fixture with a stale shape fails instead of passing."
+        },
+        {
+          "technique": "recorded-interaction-fixtures",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/testgen.ts:65 The counterpart is the repo's own daemon, not a remote service. Even so, wireReport is a hand-written TS copy of report_wire.rs's cut and sort behaviour, and nothing checks it against the daemon's real output. Only its shape is checked."
+        },
+        {
+          "technique": "approval-snapshots-with-guarded-update",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/model.test.ts:8 There are no snapshot or record modes. Outputs are small derived values asserted directly, not large structures that would call for approval files."
+        },
+        {
+          "technique": "assert-through-the-reader",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/layer2.test.tsx:158 The only emitted 'text' is RPC JSON produced by the data layer's serializer; no shell, config or paste artifacts. The substring match over JSON is still a near-side check: it would not catch the key landing at the wrong nesting level."
+        }
+      ]
     }
   }
 }
