@@ -91,6 +91,8 @@ export function eventText(ev: StreamEvent): string {
       return `engine ${ev.state}${ev.detail ? ` · ${ev.detail}` : ""}`;
     case "session":
       return `warm session ${ev.kind.replace(/_/g, " ")}${ev.detail ? ` · ${ev.detail}` : ""}`;
+    case "recall":
+      return `recall · ${ev.facts?.length ?? 0} facts · ${ev.habits?.length ?? 0} habits · ${ev.episodes?.length ?? 0} episodes`;
     case "stream_end":
       return ev.reason;
   }

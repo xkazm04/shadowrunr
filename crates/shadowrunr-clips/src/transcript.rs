@@ -201,6 +201,7 @@ pub fn ts_of(ev: &StreamEvent) -> TsMs {
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
         | StreamEvent::Session { ts_ms, .. }
+        | StreamEvent::Recall { ts_ms, .. }
         | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms,
     }

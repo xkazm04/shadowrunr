@@ -1,0 +1,64 @@
+{
+  "draft_note": "DRAFT - PENDING OWNER APPROVAL. An example of one audience-authored arc, written as a shape to review, not a decision. Nothing loads this file: an arc runs only when the owner puts it in an approved stream prep (prep.json `arc`) with `status` set to `approved`. While `status` is `draft` the brain refuses it even there.",
+  "id": "council-object",
+  "title": "The Empty Council Seat",
+  "status": "draft",
+  "recap": "On an earlier night the minions voted a household object onto the Dread Council; whatever it does now is their doing.",
+  "start": "open-seat",
+  "states": [
+    {
+      "id": "open-seat",
+      "summary": "A seat on the Dread Council stands empty and the bylaws allow any object of standing to fill it",
+      "vote": {
+        "question": "Which household object takes the empty Council seat?",
+        "options": ["The Kettle", "The Mop"]
+      }
+    },
+    {
+      "id": "kettle-seated",
+      "summary": "The Kettle sits on the Dread Council by the minions' vote",
+      "payoff": "Councillor Kettle obstructs tonight's scheme: every decree must now be submitted to it, and it only whistles",
+      "vote": {
+        "question": "What becomes of Councillor Kettle?",
+        "options": ["Impeach it", "Crown it"]
+      }
+    },
+    {
+      "id": "mop-seated",
+      "summary": "The Mop sits on the Dread Council by the minions' vote",
+      "payoff": "Councillor Mop obstructs tonight's scheme: it has mopped the war table clean of every plan and demands a recount",
+      "vote": {
+        "question": "What becomes of Councillor Mop?",
+        "options": ["Impeach it", "Crown it"]
+      }
+    },
+    {
+      "id": "kettle-impeached",
+      "summary": "The Kettle was impeached by the minions' vote",
+      "payoff": "The Kettle's impeachment is entered in the Grudge Ledger; the scheme it blocked resumes, slightly scalded"
+    },
+    {
+      "id": "kettle-crowned",
+      "summary": "The Kettle was crowned by the minions' vote",
+      "payoff": "The Kettle now outranks him on paper; he serves it tea out of spite and resumes the scheme in its name"
+    },
+    {
+      "id": "mop-impeached",
+      "summary": "The Mop was impeached by the minions' vote",
+      "payoff": "The Mop's impeachment is entered in the Grudge Ledger; the war table is dirty again and the scheme resumes"
+    },
+    {
+      "id": "mop-crowned",
+      "summary": "The Mop was crowned by the minions' vote",
+      "payoff": "The Mop now outranks him on paper; the scheme resumes under its spotless, damp authority"
+    }
+  ],
+  "transitions": [
+    { "id": "seat-kettle", "from": "open-seat", "option": "The Kettle", "to": "kettle-seated", "announce": "The Kettle is sworn onto the Dread Council; its first act will be felt on the next night" },
+    { "id": "seat-mop", "from": "open-seat", "option": "The Mop", "to": "mop-seated", "announce": "The Mop is sworn onto the Dread Council; its first act will be felt on the next night" },
+    { "id": "impeach-kettle", "from": "kettle-seated", "option": "Impeach it", "to": "kettle-impeached", "announce": "Councillor Kettle is impeached and carried out of the chamber, still warm" },
+    { "id": "crown-kettle", "from": "kettle-seated", "option": "Crown it", "to": "kettle-crowned", "announce": "Councillor Kettle is crowned, against every instinct he has" },
+    { "id": "impeach-mop", "from": "mop-seated", "option": "Impeach it", "to": "mop-impeached", "announce": "Councillor Mop is impeached and wrung out in public" },
+    { "id": "crown-mop", "from": "mop-seated", "option": "Crown it", "to": "mop-crowned", "announce": "Councillor Mop is crowned, dripping, against every instinct he has" }
+  ]
+}

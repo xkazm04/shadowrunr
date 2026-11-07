@@ -299,6 +299,13 @@ export type HealthState = "green" | "amber" | "red";
  */
 export type PreflightRunResult = HealthReport[];
 /**
+ * Whether an arc may run. Only the owner approves one; a draft is never loaded.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ArcStatus".
+ */
+export type ArcStatus = "draft" | "approved";
+/**
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "BitKind".
  */
@@ -515,6 +522,31 @@ export type StreamEvent =
       source?: BeatSource;
       ts_ms: number;
       type: "beat_plan";
+    }
+  | {
+      /**
+       * Episode ids rendered in the episode window (this stream's unflushed turns are not
+       * episodes yet and are not listed).
+       */
+      episodes?: string[];
+      /**
+       * Fact ids rendered, viewer facts included.
+       */
+      facts?: string[];
+      /**
+       * Learned habit (procedural) ids rendered.
+       */
+      habits?: string[];
+      /**
+       * Moment fact ids offered as recognition of a past night (each also in `facts`).
+       */
+      moments?: string[];
+      ts_ms: number;
+      type: "recall";
+      /**
+       * Viewer ids briefed this beat.
+       */
+      viewers?: string[];
     }
   | {
       detail?: string;
@@ -3293,6 +3325,7 @@ export interface StreamPrep {
    */
   approved_by?: string;
   approved_ms?: number;
+  arc?: ArcDef;
   bits: PrepBit[];
   character: string;
   checks: PrepCheck[];
@@ -3312,12 +3345,87 @@ export interface StreamPrep {
   table_read?: TableReadPlan;
 }
 /**
+ * One bounded audience-authored arc: viewers' confirmed votes move it from night to night
+ * through the states and transitions the owner approved, and nothing else does (no chat text,
+ * no model line). See `shadowrunr_brain::arc`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ArcDef".
+ */
+export interface ArcDef {
+  id: string;
+  /**
+   * A short factual recap a newcomer gets before taking part.
+   */
+  recap: string;
+  /**
+   * The state the arc starts in.
+   */
+  start: string;
+  states: ArcStateDef[];
+  status: ArcStatus;
+  title: string;
+  transitions: ArcTransition[];
+}
+/**
+ * One state of an arc.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ArcStateDef".
+ */
+export interface ArcStateDef {
+  id: string;
+  /**
+   * The consequence owed on the night after this state is entered; delivered once.
+   */
+  payoff?: string;
+  /**
+   * What is true in this state, one line, for the host.
+   */
+  summary: string;
+  vote?: ArcVote;
+}
+/**
+ * The vote a state puts to the room.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ArcVote".
+ */
+export interface ArcVote {
+  /**
+   * The options, exactly as the poll offers them; each permitted transition names one.
+   */
+  options: string[];
+  question: string;
+}
+/**
+ * A permitted move: when the vote of `from` is won by `option`, the arc goes to `to`.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "ArcTransition".
+ */
+export interface ArcTransition {
+  /**
+   * What the host announces when it happens (owner-approved; he says it in his words).
+   */
+  announce: string;
+  from: string;
+  id: string;
+  option: string;
+  to: string;
+}
+/**
  * One prepared bit, for one segment.
  *
  * This interface was referenced by `RpcMethods`'s JSON-Schema
  * via the `definition` "PrepBit".
  */
 export interface PrepBit {
+  /**
+   * A prerequisite: the bit is offered only while the prep's [`ArcDef`] stands in this
+   * state. Absent: offered whatever the arc (and with no arc).
+   */
+  arc_state?: string;
   id: string;
   kind: BitKind;
   /**

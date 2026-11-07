@@ -29,7 +29,7 @@ use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::Rank;
 use shadowrunr_types::{
     ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SegmentId, SimRunSpec,
-    StreamEvent, TsMs,
+    StreamEvent, TsMs, VoteTally,
 };
 
 use crate::calibration::{self, Calibration, CalibrationOrigin};
@@ -57,6 +57,24 @@ pub trait Mind: Send {
         ctx: &SegmentContext,
     ) -> Result<Vec<StreamEvent>, SimError>;
     async fn end_stream(&mut self, now_ms: TsMs) -> Result<(), SimError>;
+    /// The runtime closed a poll: its typed tallies, as the stage reported them (a `vote`
+    /// event with `closed`). The brain's arc moves only on this ([`shadowrunr_brain::arc`]).
+    fn vote_closed(&mut self, _poll_id: &str, _tallies: &[VoteTally], _now_ms: TsMs) {}
+}
+
+/// The polls the stage reports closed in `evs`, with their tallies.
+pub(crate) fn closed_votes(evs: &[StreamEvent]) -> Vec<(String, Vec<VoteTally>)> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Vote {
+                poll_id,
+                tallies,
+                closed: true,
+                ..
+            } => Some((poll_id.clone(), tallies.clone())),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The segment runtime, as the loop sees it.
@@ -110,6 +128,10 @@ impl Mind for Brain {
     }
     async fn end_stream(&mut self, now_ms: TsMs) -> Result<(), SimError> {
         Ok(Brain::end_stream(self, now_ms).await?)
+    }
+    fn vote_closed(&mut self, poll_id: &str, tallies: &[VoteTally], now_ms: TsMs) {
+        // A result the arc cannot take is no error: most polls are not the arc's.
+        let _ = self.confirm_vote(poll_id, tallies, now_ms);
     }
 }
 
@@ -376,6 +398,9 @@ pub(crate) struct Prepared {
     pub case: Option<StagedCase>,
     /// The Table Read the run plays (SEG-03, or SEG-01's handover with a prep plan).
     pub table_read: Option<TableRead>,
+    /// The seed the run's population is drawn from, when it is not the spec's: the nights of a
+    /// multi-night run share one population and draw fresh chat ([`crate::nights`]).
+    pub pop_seed: Option<u64>,
 }
 
 /// `<run_dir>/judge-windows/`: the windowed judge's stored window replies (a re-judge after an
@@ -662,6 +687,7 @@ pub(crate) fn prepare_in(
         brief,
         case,
         table_read,
+        pop_seed: None,
     })
 }
 
@@ -692,7 +718,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         &spec.population,
         spec.audience_size,
         spec.duration_s,
-        spec.seed,
+        prep.pop_seed.unwrap_or(spec.seed),
         opts.hooks.rank,
     )?;
     let mut room = ChatRoom::with_propose_min_rank(
@@ -786,6 +812,9 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                 } else {
                     drop_op_echo(&ops, stage.apply_ops(now, &ops))
                 };
+                for (id, tallies) in closed_votes(&staged) {
+                    mind.vote_closed(&id, &tallies, now);
+                }
                 let evs = beat_events(evs, staged);
                 room.observe(t, &evs);
                 w.push_all(evs)?;
@@ -821,6 +850,9 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         }
 
         let ev = stage.tick(now, ccv);
+        for (id, tallies) in closed_votes(&ev) {
+            mind.vote_closed(&id, &tallies, now);
+        }
         room.observe(t, &ev);
         w.push_all(ev)?;
         room.sync_poll(t, stage.open_poll());
@@ -1041,6 +1073,23 @@ pub(crate) async fn build_brain(
     Ok(brain)
 }
 
+/// The segment runtime a simulated run plays: the whole run is one segment.
+pub(crate) fn run_stage(prep: &Prepared) -> Result<SegmentRuntime, SimError> {
+    let spec = &prep.spec;
+    let mut config = SegmentConfig {
+        start_ms: Some(0),
+        // The whole run is one segment: a long SEG-02A run plays the case's arc.
+        planned_s: Some(spec.duration_s),
+        ..segment_config(prep)?
+    };
+    if let Some(case) = &prep.case {
+        // A simulation is private: an unapproved real case may run (and is marked).
+        config = config.with_staged_case(case, StreamKind::PrivateSim);
+    }
+    SegmentRuntime::with_config(spec.segment, config)
+        .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))
+}
+
 pub(crate) fn temp_memory_dir(run_id: &str) -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1088,18 +1137,7 @@ pub async fn run_one_with(
     let res = async {
         std::fs::create_dir_all(&memory_dir)
             .map_err(|e| SimError::Io(format!("{}: {e}", memory_dir.display())))?;
-        let mut config = SegmentConfig {
-            start_ms: Some(0),
-            // The whole run is one segment: a long SEG-02A run plays the case's arc.
-            planned_s: Some(spec.duration_s),
-            ..segment_config(&prep)?
-        };
-        if let Some(case) = &prep.case {
-            // A simulation is private: an unapproved real case may run (and is marked).
-            config = config.with_staged_case(case, StreamKind::PrivateSim);
-        }
-        let stage = SegmentRuntime::with_config(spec.segment, config)
-            .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))?;
+        let stage = run_stage(&prep)?;
         let brain = build_brain(
             &prep,
             opts,

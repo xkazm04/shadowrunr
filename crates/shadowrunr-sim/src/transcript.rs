@@ -21,7 +21,15 @@ pub struct TranscriptWriter {
     flush_each: bool,
     /// Called with each event and its 1-based line, in push order, after the line is written.
     sink: Option<EventSink>,
+    /// The beats' recall receipts ([`StreamEvent::Recall`]), kept beside the transcript in
+    /// [`RECALL_FILE`], never in it.
+    recalls: Vec<StreamEvent>,
 }
+
+/// `<run_dir>/recall.jsonl`: one recall receipt per composed beat, ids only. It sits beside the
+/// transcript, not in it: the judge reads every transcript line, and receipts are memory
+/// bookkeeping, not show.
+pub const RECALL_FILE: &str = "recall.jsonl";
 
 impl TranscriptWriter {
     /// A buffered writer, flushed on [`TranscriptWriter::flush`].
@@ -33,6 +41,7 @@ impl TranscriptWriter {
             events: Vec::new(),
             flush_each: false,
             sink: None,
+            recalls: Vec::new(),
         })
     }
 
@@ -54,6 +63,10 @@ impl TranscriptWriter {
     /// and the line returned is the last one written.
     pub fn push(&mut self, ev: StreamEvent) -> Result<usize, SimError> {
         if matches!(ev, StreamEvent::Session { .. }) {
+            return Ok(self.events.len());
+        }
+        if matches!(ev, StreamEvent::Recall { .. }) {
+            self.recalls.push(ev);
             return Ok(self.events.len());
         }
         let line = serde_json::to_string(&ev).map_err(|e| SimError::Io(e.to_string()))?;
@@ -81,8 +94,25 @@ impl TranscriptWriter {
         &self.events
     }
 
+    /// The recall receipts pushed so far, in order.
+    pub fn recalls(&self) -> &[StreamEvent] {
+        &self.recalls
+    }
+
+    /// Flush the transcript, and write the receipts to [`RECALL_FILE`] beside it when there are
+    /// any.
     pub fn flush(&mut self) -> Result<(), SimError> {
-        self.out.flush().map_err(|e| SimError::Io(e.to_string()))
+        self.out.flush().map_err(|e| SimError::Io(e.to_string()))?;
+        if self.recalls.is_empty() {
+            return Ok(());
+        }
+        let path = self.path.with_file_name(RECALL_FILE);
+        let mut text = String::new();
+        for r in &self.recalls {
+            text.push_str(&serde_json::to_string(r).map_err(|e| SimError::Io(e.to_string()))?);
+            text.push('\n');
+        }
+        std::fs::write(&path, text).map_err(|e| SimError::Io(format!("{}: {e}", path.display())))
     }
 
     pub fn path(&self) -> &Path {
@@ -135,6 +165,7 @@ pub fn ts(ev: &StreamEvent) -> TsMs {
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
         | StreamEvent::Session { ts_ms, .. }
+        | StreamEvent::Recall { ts_ms, .. }
         | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms,
     }
@@ -160,6 +191,7 @@ pub fn set_ts(ev: &mut StreamEvent, ts: TsMs) {
         | StreamEvent::Job { ts_ms, .. }
         | StreamEvent::Health { ts_ms, .. }
         | StreamEvent::Session { ts_ms, .. }
+        | StreamEvent::Recall { ts_ms, .. }
         | StreamEvent::BeatPlan { ts_ms, .. }
         | StreamEvent::StreamEnd { ts_ms, .. } => *ts_ms = ts,
         StreamEvent::Chat { ts_ms, msg } => {
@@ -285,6 +317,21 @@ pub fn body(ev: &StreamEvent) -> String {
                 .as_deref()
                 .map(|d| format!(": {d}"))
                 .unwrap_or_default()
+        ),
+        StreamEvent::Recall {
+            facts,
+            habits,
+            episodes,
+            viewers,
+            moments,
+            ..
+        } => format!(
+            "recall {} facts, {} habits, {} episodes, {} viewers, {} moments",
+            facts.len(),
+            habits.len(),
+            episodes.len(),
+            viewers.len(),
+            moments.len()
         ),
         StreamEvent::Session { kind, detail, .. } => format!(
             "session {}{}",

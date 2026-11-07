@@ -29,6 +29,7 @@
 //!    chat when `crisis-chat-ban` is enabled (their name is withheld from his lines for the
 //!    rest of the stream). Every line put on air advances the speech clock.
 
+pub mod arc;
 pub mod care;
 pub mod case_names;
 pub mod character;
@@ -37,6 +38,7 @@ pub mod fleet;
 pub mod grammar;
 pub mod memory;
 pub mod moderation;
+pub mod moments;
 pub mod orchestrate;
 pub mod outgate;
 pub mod pace;
@@ -213,6 +215,10 @@ const RECALL_FACTS: usize = 8;
 const ALWAYS_PER_SCOPE: usize = 3;
 const VIEWER_FACTS: usize = 5;
 const RECALL_EPISODES: usize = 8;
+/// Learned habits per beat at most, chosen by relevance to the live query.
+const HABITS_PER_BEAT: usize = 3;
+/// A habit shown unchanged is not shown again for this many beats.
+const HABIT_COOLDOWN_BEATS: u64 = 4;
 const EPISODE_ITEM_CHARS: usize = 2_000;
 /// The output moderation rule recording the help line the engine added to a crisis beat whose
 /// aired lines held no pointer to help ([`moderation::CRISIS_HELP_LINE`]).
@@ -221,6 +227,8 @@ pub const CRISIS_POINTER_RULE: &str = "crisis_pointer";
 pub const CRISIS_POINTER_ADDED: &str = "added";
 /// Beats between warm-session open attempts after one failed.
 const SESSION_RETRY_BEATS: u64 = 10;
+/// The episode-window label of this stream's turns not yet flushed into an episode.
+const THIS_STREAM_LABEL: &str = "this-stream-";
 
 /// The care-state record in the transcript (`care_state` / `started|restarted|expired`), on
 /// the disclosure's message id.
@@ -337,6 +345,15 @@ pub struct Brain {
     last_prompt: Option<String>,
     last_reply: Option<EngineReply>,
     last_consolidation: Option<Result<ConsolidationReport, String>>,
+    /// Habit id -> (beat it was last shown, its `updated_ms` then): the cooldown against
+    /// re-showing an unchanged habit every beat.
+    habit_shown: std::collections::HashMap<String, (u64, TsMs)>,
+    /// Viewers picked this stream: a moment from a past night is offered on a viewer's first
+    /// pick only ([`moments`]).
+    moment_offered: HashSet<String>,
+    /// The stream's audience-authored arc, when its approved prep carries an approved one
+    /// ([`arc`]).
+    arc: Option<arc::ArcRun>,
 }
 
 impl Brain {
@@ -413,6 +430,9 @@ impl Brain {
             last_prompt: None,
             last_reply: None,
             last_consolidation: None,
+            habit_shown: Default::default(),
+            moment_offered: HashSet::new(),
+            arc: None,
             cfg,
             engine,
             tuning,
@@ -501,7 +521,35 @@ impl Brain {
     /// The approved stream prep for this stream: its cold open, bits and connectors. Without one,
     /// the stream runs on chat and the segment's rules alone.
     pub fn set_prep(&mut self, prep: shadowrunr_types::prep::StreamPrep) {
+        // Its arc runs only when the owner approved it ([`arc::ArcRun::load`]); its state is
+        // read from the memory, so it picks up where the last night left it.
+        self.arc = prep.arc.as_ref().and_then(|d| {
+            arc::ArcRun::load(d, &self.cfg.memory_dir, &self.cfg.stream_id)
+                .ok()
+                .flatten()
+        });
         self.prep = Some(prep);
+    }
+
+    /// The state of the stream's arc, if one runs.
+    pub fn arc_state(&self) -> Option<&str> {
+        self.arc.as_ref().map(arc::ArcRun::state)
+    }
+
+    /// The runtime confirmed a closed poll (its typed tallies). The arc moves only on a poll
+    /// the brain put up for its current vote, won outright by an option a permitted transition
+    /// names; the move is announced by the next beat that can carry it ([`arc`]). Returns the
+    /// event id when the result was taken.
+    pub fn confirm_vote(
+        &mut self,
+        poll_id: &str,
+        tallies: &[shadowrunr_types::VoteTally],
+        now_ms: TsMs,
+    ) -> Result<Option<String>, BrainError> {
+        match self.arc.as_mut() {
+            Some(a) => a.confirm_vote(poll_id, tallies, now_ms),
+            None => Ok(None),
+        }
     }
 
     /// The stream's prep, if one was set.
@@ -702,9 +750,33 @@ impl Brain {
         Ok(())
     }
 
-    fn flush_turns(&mut self, now_ms: TsMs) -> Result<(), BrainError> {
+    /// At most [`HABITS_PER_BEAT`] learned habits relevant to `query` (BM25 over live,
+    /// source-backed habits), skipping one shown unchanged within [`HABIT_COOLDOWN_BEATS`].
+    fn select_habits(&mut self, query: &str) -> Result<Vec<memory::Procedural>, BrainError> {
+        let mut out = Vec::new();
+        for p in self.store.search_habits(query, HABITS_PER_BEAT * 3)? {
+            if out.len() >= HABITS_PER_BEAT {
+                break;
+            }
+            let cooling = self.habit_shown.get(&p.id).is_some_and(|&(tick, updated)| {
+                updated == p.updated_ms && self.ticks.saturating_sub(tick) < HABIT_COOLDOWN_BEATS
+            });
+            if !cooling {
+                out.push(p);
+            }
+        }
+        for p in &out {
+            self.habit_shown
+                .insert(p.id.clone(), (self.ticks, p.updated_ms));
+        }
+        Ok(out)
+    }
+
+    /// Write the pending turns as one Stream episode; its id, or `None` when nothing was
+    /// pending.
+    fn flush_turns(&mut self, now_ms: TsMs) -> Result<Option<String>, BrainError> {
         if self.turns.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
         let text = std::mem::take(&mut self.turns).join("\n");
         let ep = shadowrunr_types::Episode {
@@ -715,7 +787,8 @@ impl Brain {
             text,
             importance: 3,
         };
-        self.store.write_episode(&ep)
+        self.store.write_episode(&ep)?;
+        Ok(Some(ep.id))
     }
 
     /// The beat's core call failed: the orchestrator un-consumes the beat ([`Orchestrator::rollback`]),
@@ -1256,6 +1329,10 @@ impl Brain {
         self.working
             .note_viewers(cands.iter().map(|c| c.msg.viewer.name.as_str()));
         // What the beat consumes stands only once its core call is delivered.
+        self.orch.set_arc(
+            self.arc.as_ref().map(|a| a.state().to_string()),
+            self.arc.as_ref().and_then(arc::ArcRun::open_loop),
+        );
         let txn = self.orch.begin();
         let mut plan = self.orch.plan(&BeatInputs {
             now_ms,
@@ -1361,24 +1438,83 @@ impl Brain {
             .iter()
             .any(|c| c.injection || claims_authority(&c.msg.text, &self.cfg.character.persona));
 
-        // Recall.
+        // Recall: only what the markdown still backs ([`MemoryStore::fact_recallable`]). Habits
+        // are chosen by the live query (picks, the case and the segment), never wholesale.
+        let mut habit_query = String::new();
+        for c in pick
+            .chosen
+            .iter()
+            .filter(|c| !c.injection && c.safety.is_none())
+        {
+            habit_query.push_str(&c.msg.text);
+            habit_query.push(' ');
+        }
+        habit_query.push_str(&one_line(&ctx.state_summary, 300));
+        habit_query.push(' ');
+        habit_query.push_str(&one_line(&ctx.rules_prompt, 200));
+        let procedurals = self.select_habits(&habit_query)?;
         let pkg = &self.cfg.character;
         let mut briefing = Vec::new();
         let mut recalled_ids: Vec<String> = Vec::new();
+        // (id, key) of every fact and habit rendered: a NOTE naming one marks it used.
+        let mut memo_keys: Vec<(String, String)> = procedurals
+            .iter()
+            .map(|p| (p.id.clone(), p.key.clone()))
+            .collect();
         let mut seen_viewers = HashSet::new();
+        // A disclosure or a care ask in the beat: no past night is brought up.
+        let care_beat = pick.chosen.iter().any(|c| {
+            c.safety.is_some() || situational_asks(&c.msg.text).iter().any(|a| a.is_care())
+        });
+        let seg = compose::seg_wire(ctx.segment);
+        let mut moment_ids: Vec<String> = Vec::new();
         for c in &pick.chosen {
             let v = &c.msg.viewer;
             if !seen_viewers.insert(v.id.clone()) {
                 continue;
             }
-            let facts = self.store.viewer_facts(&v.id, VIEWER_FACTS)?;
+            // Moments are offered on their own terms below, never as briefing facts.
+            let (moments, mut facts): (Vec<StoredFact>, Vec<StoredFact>) = self
+                .store
+                .viewer_facts(&v.id, VIEWER_FACTS + 8)?
+                .into_iter()
+                .partition(|f| moments::is_moment_key(&f.fact.key));
+            facts.truncate(VIEWER_FACTS);
+            // A returning viewer's first pick this stream: at most one moment from a past night.
+            let first = self.moment_offered.insert(v.id.clone());
+            let moment = (first && !care_beat && !c.injection)
+                .then(|| moments::choose_moment(&moments, &self.cfg.stream_id, &seg, &c.msg.text))
+                .flatten()
+                .cloned();
+            let moment_line = moment.as_ref().map(|m| {
+                format!(
+                    "[{}] {} (episode {})",
+                    m.fact.key,
+                    m.fact.value,
+                    m.fact.sources.first().map_or("", String::as_str)
+                )
+            });
+            if let Some(m) = moment {
+                moment_ids.push(m.fact.id.clone());
+                facts.push(m);
+            }
             recalled_ids.extend(facts.iter().map(|f| f.fact.id.clone()));
+            memo_keys.extend(
+                facts
+                    .iter()
+                    .map(|f| (f.fact.id.clone(), f.fact.key.clone())),
+            );
             briefing.push(ViewerBrief {
                 id: v.id.clone(),
                 name: v.name.clone(),
                 title: pkg.rank_titles.title(v.rank),
                 months: v.months,
-                facts: facts.iter().map(|f| one_line(&f.fact.value, 200)).collect(),
+                facts: facts
+                    .iter()
+                    .filter(|f| !moments::is_moment_key(&f.fact.key))
+                    .map(|f| one_line(&f.fact.value, 200))
+                    .collect(),
+                moment: moment_line,
             });
         }
         let mut query = String::new();
@@ -1401,13 +1537,20 @@ impl Brain {
                 .viewer_id
                 .as_ref()
                 .is_some_and(|v| seen_viewers.contains(v));
-            if !in_brief && !facts.iter().any(|x| x.fact.id == f.fact.id) {
+            // A moment is its viewer's own, offered once: never recalled by search.
+            let moment = moments::is_moment_key(&f.fact.key);
+            if !in_brief && !moment && !facts.iter().any(|x| x.fact.id == f.fact.id) {
                 facts.push(f);
             }
         }
         recalled_ids.extend(facts.iter().map(|f| f.fact.id.clone()));
+        memo_keys.extend(
+            facts
+                .iter()
+                .map(|f| (f.fact.id.clone(), f.fact.key.clone())),
+        );
+        // Diagnostic only: being shown never keeps a memory alive ([`MemoryStore::decay`]).
         self.store.mark_recalled(&recalled_ids, now_ms)?;
-        let procedurals = self.store.top_procedurals(5)?;
 
         let to_item = |e: &shadowrunr_types::Episode| WindowItem {
             ts_ms: e.ts_ms,
@@ -1429,7 +1572,7 @@ impl Brain {
         for (i, t) in self.turns.iter().enumerate() {
             recent.push(WindowItem {
                 ts_ms: now_ms,
-                label: format!("this-stream-{}", i + 1),
+                label: format!("{THIS_STREAM_LABEL}{}", i + 1),
                 text: t.clone(),
             });
         }
@@ -1527,6 +1670,58 @@ impl Brain {
             self.working
                 .voice_section_for(&pkg.effects, source, &tags, &picked_names)
         });
+        // The stream's arc: its due beat (an announcement, a consequence, a vote) and the recap a
+        // newcomer is owed, as owner-approved material. Never on a care beat or the goodbye; a
+        // room event's or an owed answer's beat carries no arc beat either.
+        let arc_free = !care_beat && !closing && plan.room_note.is_none() && !plan.is_owed();
+        let arc_cue = self
+            .arc
+            .as_ref()
+            .filter(|_| arc_free)
+            .and_then(|a| a.cue(now_ms, ctx.allowed_ops.iter().any(|o| o == "start_poll")));
+        let newcomers: Vec<(String, String)> = pick
+            .chosen
+            .iter()
+            .filter(|c| c.safety.is_none() && !c.injection)
+            .filter(|c| pctx.first_contacts.contains(&c.msg.id))
+            .filter(|c| !pctx.regulars.contains(&c.msg.viewer.id))
+            .map(|c| (c.msg.viewer.id.clone(), c.msg.viewer.name.clone()))
+            .collect();
+        let arc_recap = self
+            .arc
+            .as_ref()
+            .filter(|_| !care_beat && !closing)
+            .and_then(|a| a.recap_for(&newcomers));
+        let arc_text: String = [
+            arc_cue
+                .as_ref()
+                .and_then(|c| self.arc.as_ref().map(|a| a.material(c))),
+            arc_recap.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let material = match (plan.material.as_deref(), arc_text.is_empty()) {
+            (m, true) => m.map(str::to_string),
+            (Some(m), false) => Some(format!("{}\n{arc_text}", m.trim_end())),
+            (None, false) => Some(arc_text),
+        };
+        let arc_what: Vec<&str> = [
+            arc_cue.as_ref().map(|c| match c {
+                arc::ArcCue::Announce(_) => "announce",
+                arc::ArcCue::Payoff(_) => "consequence",
+                arc::ArcCue::Vote(_) => "vote",
+            }),
+            arc_recap.as_ref().map(|_| "recap"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if !arc_what.is_empty() {
+            if let StreamEvent::BeatPlan { reason, .. } = &mut ev[plan_at] {
+                reason.push_str(&format!("; arc: {}", arc_what.join(", ")));
+            }
+        }
         let waves_now = self.orch.question_waves().clone();
         let prompt = compose_turn(&TurnInputs {
             ctx,
@@ -1542,7 +1737,7 @@ impl Brain {
             fresh_bit,
             brief: self.brief.as_ref(),
             care_note: care.as_deref(),
-            material: plan.material.as_deref(),
+            material: material.as_deref(),
             beat_note: plan.note.as_deref(),
             room_note: plan.room_note.as_deref(),
             agenda: plan.agenda.as_deref(),
@@ -1559,6 +1754,18 @@ impl Brain {
             guest_turns: guest_on.is_some() && !host_only,
         });
         self.last_prompt = Some(prompt.clone());
+        // The recall receipt: ids of what this prompt rendered, never values.
+        ev.push(StreamEvent::Recall {
+            ts_ms: now_ms,
+            facts: recalled_ids.clone(),
+            habits: procedurals.iter().map(|p| p.id.clone()).collect(),
+            episodes: compose::rendered_window_labels(&window)
+                .into_iter()
+                .filter(|l| !l.starts_with(THIS_STREAM_LABEL))
+                .collect(),
+            viewers: briefing.iter().map(|b| b.id.clone()).collect(),
+            moments: moment_ids,
+        });
 
         // The turn record that becomes part of the next stream episode. It is replayed into
         // later turns and kept in long-term memory, so a disclosure's text never enters it:
@@ -1863,6 +2070,8 @@ impl Brain {
         // for it.
         let mut explained: Option<bool> = None;
         let mut waiting_ops: Vec<(String, Op)> = Vec::new();
+        // This beat's NOTE lines as they passed the gate (a NOTE naming a pick is a moment).
+        let mut noted_texts: Vec<String> = Vec::new();
         let drop_guest = |held: &mut Option<(String, String)>, ev: &mut Vec<StreamEvent>| {
             if held.take().is_some() {
                 ev.push(moderation::output_event(
@@ -2031,6 +2240,18 @@ impl Brain {
                         importance: 3,
                     };
                     self.store.write_episode(&ep)?;
+                    // A NOTE naming a memory this prompt rendered is a use: it resets aging.
+                    let lower = noted.to_lowercase();
+                    let used: Vec<String> = memo_keys
+                        .iter()
+                        .filter(|(id, key)| {
+                            (key.chars().count() >= 3 && lower.contains(&key.to_lowercase()))
+                                || lower.contains(&id.to_lowercase())
+                        })
+                        .map(|(id, _)| id.clone())
+                        .collect();
+                    self.store.mark_used(&used, now_ms)?;
+                    noted_texts.push(lower);
                 }
                 Line::Rejected { rule, .. } => {
                     ev.push(moderation::output_event(now_ms, &rule, "rejected"));
@@ -2281,7 +2502,57 @@ impl Brain {
         // Newly dispatched jobs report "queued" in the same beat.
         self.collect_jobs(now_ms, &mut ev)?;
 
+        // On-show moments: the typed acts this beat aired an answer to ([`moments`]). Their
+        // source is this beat's own episode, flushed now so it exists on disk.
+        let acts = if crisis || sad {
+            Vec::new()
+        } else {
+            self.moment_acts(&pick, &pctx.owed, &ev, &noted_texts)
+        };
+        let aired = !say_idx.is_empty();
         self.record_turn(&turn, now_ms)?;
+        // An arc beat counts once it aired: its transition or consequence is written then,
+        // citing this beat's own episode.
+        let arc_aired = aired && arc_cue.is_some();
+        if !acts.is_empty() || arc_aired {
+            if let Some(ep) = self.flush_turns(now_ms)? {
+                if let (true, Some(a), Some(cue)) = (arc_aired, self.arc.as_mut(), &arc_cue) {
+                    a.delivered(cue, &ep, now_ms)?;
+                }
+                let seg = compose::seg_wire(ctx.segment);
+                let date = moments::date_of(now_ms);
+                for (viewer, kind, aired, words) in acts {
+                    let value = moments::moment_value(kind, &seg, &date, &aired, &words);
+                    moments::write_moment(
+                        &self.store,
+                        &viewer,
+                        &self.cfg.stream_id,
+                        kind,
+                        &value,
+                        &ep,
+                        now_ms,
+                    )?;
+                }
+            }
+        }
+        if let Some(a) = self.arc.as_mut() {
+            if aired && arc_recap.is_some() {
+                a.recapped(newcomers.into_iter().map(|(id, _)| id));
+            }
+            // A poll this beat put up for the arc's vote is the one whose result can move it.
+            for e in &ev {
+                if let StreamEvent::Op {
+                    op:
+                        Op::StartPoll {
+                            poll_id, options, ..
+                        },
+                    ..
+                } = e
+                {
+                    a.note_poll(poll_id, options);
+                }
+            }
+        }
         if self
             .ticks
             .is_multiple_of(u64::from(self.tuning.episode_every_ticks.max(1)))
@@ -2289,6 +2560,60 @@ impl Brain {
             self.flush_turns(now_ms)?;
         }
         Ok(ev)
+    }
+
+    /// The beat's on-show acts, one per viewer, the strongest: (viewer id, kind, his aired line
+    /// answering it, their words). A pick counts only when an aired line answers it
+    /// (`replying_to`); a disclosure or an injection never counts.
+    fn moment_acts(
+        &self,
+        pick: &Pick,
+        owed: &[String],
+        ev: &[StreamEvent],
+        noted: &[String],
+    ) -> Vec<(String, moments::MomentKind, String, String)> {
+        use moments::MomentKind;
+        let mut out: Vec<(String, MomentKind, String, String)> = Vec::new();
+        for c in pick
+            .chosen
+            .iter()
+            .filter(|c| c.safety.is_none() && !c.injection)
+        {
+            let Some(aired) = ev.iter().find_map(|e| match e {
+                StreamEvent::Say {
+                    speaker: Speaker::Host,
+                    text,
+                    replying_to,
+                    ..
+                } if replying_to.contains(&c.msg.id) => Some(text.clone()),
+                _ => None,
+            }) else {
+                continue;
+            };
+            let v = &c.msg.viewer;
+            let proposal = matches!(
+                c.msg.command,
+                Some(shadowrunr_types::Command::Propose { .. })
+            ) && v.rank >= self.tuning.filter.propose_min_rank;
+            let id = v.id.to_lowercase();
+            let kind = if proposal {
+                MomentKind::Proposal
+            } else if moderation::is_gift_or_sub(&c.msg.text) {
+                MomentKind::Gift
+            } else if owed.contains(&c.msg.id) {
+                MomentKind::Request
+            } else if id.chars().count() >= 2 && noted.iter().any(|n| n.contains(&id)) {
+                MomentKind::Noted
+            } else {
+                continue;
+            };
+            match out.iter_mut().find(|(vid, ..)| vid == &v.id) {
+                Some(o) if o.1 >= kind => {}
+                Some(o) => *o = (v.id.clone(), kind, aired, c.msg.text.clone()),
+                None => out.push((v.id.clone(), kind, aired, c.msg.text.clone())),
+            }
+        }
+        out
     }
 
     /// Run the sleep cycle now, regardless of pressure.

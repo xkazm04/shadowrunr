@@ -413,6 +413,7 @@ export function reduce(prev: SceneState, ev: StreamEvent): SceneState {
     case "beat_plan":
     case "health":
     case "session":
+    case "recall":
       return s;
     case "stream_end":
       return { ...s, ended: { reason: ev.reason, at } };

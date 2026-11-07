@@ -74,6 +74,7 @@ const SAMPLES: Record<StreamEvent["type"], unknown> = {
   beat_plan: { type: "beat_plan", ts_ms: 11, mode: "cold_open", bit_id: "story-1", picks: 0, reason: "room filling" },
   health: { type: "health", ts_ms: 11, state: "down", detail: "every route failed" },
   session: { type: "session", ts_ms: 11, kind: "died", detail: "core call i/o error" },
+  recall: { type: "recall", ts_ms: 11, facts: ["f_1"], viewers: ["v42"] },
   stream_end: { type: "stream_end", ts_ms: 11, reason: "sim_complete" },
 };
 
