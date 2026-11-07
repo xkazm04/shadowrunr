@@ -5022,7 +5022,11 @@
           "revision": 3,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:621 The disconnect RPC returns the generic ModeratorStatus (state + free-text detail), so the wire contract has no field for 'revocation unconfirmed' or 'purge verified'; the console cannot show the streamer which teardown steps the platform actually confirmed.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:8150cc8638d8623e",
+          "evaluatedRevision": 3
         },
         {
           "subject": "ipc-contract",
