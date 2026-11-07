@@ -8778,6 +8778,43 @@
         }
       ],
       "registryProposal": "For a shared wire-contract crate, the standard could state what the contract must carry: a typed broker outcome class (done / refused / rate_limited_until / unauthorised / unknown), a gap event with both edges, and a typed disconnect report. Without that, a conformant broker's honesty is lost at the RPC boundary."
+    },
+    "5ca16ac4-6263-4c09-80d5-f32a969b16b6/supply-chain": {
+      "context": "segments-runtime",
+      "subject": "supply-chain",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-07",
+      "evaluatedTs": "2026-11-07T23:21:48.873Z",
+      "worker": "c17d7834-fc3a-4c61-ab7e-0aac6a5833ea",
+      "techniques": [
+        {
+          "technique": "permission-manifest-scoping",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/data/research-allowlist.toml:10 Deny-by-default holds (https-only, empty list refused), but 'replace' lets operator-local config widen egress. The standard says privilege grows only through a committed, reviewed manifest edit. Only shadowrunr.example.toml is tracked."
+        },
+        {
+          "technique": "unsafe-deserialization-off-by-default",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/cases.rs:291 Staged case files written by the research pipeline cross a process boundary. They load through typed serde into plain data structs, with no object-graph or code-constructing loader and no permissive flag."
+        },
+        {
+          "technique": "archive-extraction-safety",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/src/cases.rs:90 Here 'extraction' means extracting text from fetched HTML or plain text. The crate has no zip/tar/gzip unpacking; the 'zip' hits in the grep are only iterator .zip()."
+        },
+        {
+          "technique": "vendored-fork-ledger",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:13 Every third-party dependency resolves from the registry. The workspace has no vendored copy, no [patch], and no git source."
+        },
+        {
+          "technique": "patching-mechanism-ladder",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:14 No dependency is modified by any mechanism (fork, mirror, runtime hook or build rewrite). sha2 is used unmodified for content hashing."
+        }
+      ],
+      "registryProposal": "permission-manifest-scoping is written around platform capability manifests (windows, webviews, extensions). Application-level network-egress allowlists that live in data files and can be overridden by operator config are a common variant the technique does not name. It should state whether an operator override may only narrow the committed list (subset check) or may replace it, because 'narrow or replace' wording turns the committed manifest into a default rather than a bound."
     }
   }
 }

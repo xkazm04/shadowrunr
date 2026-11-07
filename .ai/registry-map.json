@@ -4098,7 +4098,11 @@
           "revision": 6,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-segments/data/research-allowlist.toml:10 The research pipeline's network-egress allowlist is a committed manifest, but its own header lets an operator replace it from the uncommitted local shadowrunr.toml, and ResearchAllowlist::from_domains accepts any list with no check that it is a subset of the built-in one, so egress can widen without a reviewed diff — even though line 9 says adding a domain is strictly owner-gated.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:f5666db1094acd9f",
+          "evaluatedRevision": 6
         },
         {
           "subject": "test-harness",
