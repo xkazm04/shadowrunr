@@ -560,10 +560,16 @@ async fn tick_briefs_a_regular_with_remembered_facts() {
     .await
     .unwrap();
     let p = b.last_prompt().unwrap();
+    // Identity in the briefing; the remembered value inside the memory fence.
     assert!(
-        p.contains("Gorbo (Warlock, id v42): Swore loyalty holding a rubber chicken"),
+        p.contains("Gorbo (Warlock, id v42): see what you remember"),
         "{p}"
     );
+    let fence = p.find("<memory_").expect("memory fence");
+    let at = p
+        .find("[id v42] Swore loyalty holding a rubber chicken")
+        .expect("{p}");
+    assert!(at > fence, "{p}");
 }
 
 #[test]
