@@ -195,6 +195,8 @@ pub async fn generate_with(
         bits: material.bits,
         connectors: material.connectors,
         table_read: None,
+        // The planner never writes an arc: an arc is owner-authored.
+        arc: None,
         checks: Vec::new(),
         approved_by: None,
         approved_ms: None,

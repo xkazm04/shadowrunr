@@ -810,6 +810,9 @@ impl Session {
                     } else {
                         runner::drop_op_echo(&ops, stage.apply_ops(done, &ops))
                     };
+                    for (id, tallies) in runner::closed_votes(&staged) {
+                        mind.vote_closed(&id, &tallies, done);
+                    }
                     // A record goes out before the model's op that shows it.
                     self.log.push_all(runner::beat_events(evs, staged))?;
                     // After this beat's ops, so the model's own show_screen holds against them.
@@ -832,6 +835,9 @@ impl Session {
                 Err(e) => brain_errors.push(format!("{}s: {e}", now / 1000)),
             }
             let ev = stage.tick(done, ccv);
+            for (id, tallies) in runner::closed_votes(&ev) {
+                mind.vote_closed(&id, &tallies, done);
+            }
             self.log.push_all(ev)?;
             lock(&self.log.shared).open_poll = stage.open_poll();
             beat_ms.push(beat_start.elapsed().as_millis() as u64);

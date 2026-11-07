@@ -2499,3 +2499,45 @@ fn a_mid_line_propose_below_the_rank_stays_chat_after_the_reask_gap() {
     let (_, _, _, rec) = beat_with(&mut room, t + 5_000, Some(&cand(&later)));
     assert!(rec.contains(&("m1".into(), SUPERSEDED.into())), "{rec:?}");
 }
+
+/// The arc's owed consequence is an open loop beside a bit's payoff: it stands across beats
+/// with no bit told (a bit's sync used to close every payoff loop), and a bit with an arc
+/// prerequisite waits for its state.
+#[test]
+fn an_arc_consequence_stays_open_and_an_arc_bit_waits_for_its_state() {
+    let mut prep = sample_prep();
+    for b in &mut prep.bits {
+        b.arc_state = Some("kettle-seated".into());
+    }
+    let mut room = Room::new();
+    room.o.set_arc(
+        Some("open-seat".into()),
+        Some((
+            "arc:council".into(),
+            "the consequence of the council seat".into(),
+        )),
+    );
+    let mut t = 0;
+    for _ in 0..40 {
+        t += 5_000;
+        let p = quiet(&mut room, t, "opening", Some(&prep));
+        assert!(p.bit_id.is_none() || p.mode == BeatMode::ColdOpen, "{p:?}");
+        assert!(
+            room.o
+                .agenda_summary()
+                .contains("the consequence of the council seat"),
+            "{}",
+            room.o.agenda_summary()
+        );
+    }
+    // Delivered: the loop closes. In its state, the bits are offered.
+    room.o.set_arc(Some("kettle-seated".into()), None);
+    let mut offered = false;
+    for _ in 0..40 {
+        t += 5_000;
+        let p = quiet(&mut room, t, "opening", Some(&prep));
+        offered |= p.bit_id.is_some() && p.mode != BeatMode::ColdOpen;
+    }
+    assert!(offered);
+    assert!(!room.o.agenda_summary().contains("council seat"));
+}

@@ -361,6 +361,11 @@ pub struct Plan {
 }
 
 impl Plan {
+    /// The beat's pick is an owned request: it takes the beat.
+    pub fn is_owed(&self) -> bool {
+        self.owed
+    }
+
     fn new(mode: BeatMode, offer: Offer, ceiling: usize, reason: String) -> Self {
         Self {
             mode,
@@ -495,6 +500,12 @@ pub struct Orchestrator {
     acked_waves: Vec<String>,
     used_bits: HashSet<String>,
     active_bit: Option<ActiveBit>,
+    /// The state of the stream's audience-authored arc, if one runs ([`crate::arc`]): a bit
+    /// with an `arc_state` prerequisite is offered only in that state.
+    arc_state: Option<String>,
+    /// The arc's owed consequence or announcement, as an open loop: it stands across beats (and
+    /// nights) until delivered, beside a bit's payoff.
+    arc_loop: Option<(String, String)>,
     /// A bit finished and no chat beat followed yet (for the back-to-chat bridge).
     bit_ended: bool,
     last_bit_ms: Option<TsMs>,
@@ -1181,6 +1192,12 @@ impl Orchestrator {
     }
 
     /// An op from a delivered beat: a case op moves the case ([`case`]).
+    /// The stream's arc as it stands before this beat: its state and its owed loop.
+    pub fn set_arc(&mut self, state: Option<String>, open_loop: Option<(String, String)>) {
+        self.arc_state = state;
+        self.arc_loop = open_loop;
+    }
+
     pub fn note_op(&mut self, op: &shadowrunr_types::Op, now_ms: TsMs) {
         self.case.note_op(op, now_ms);
     }
@@ -1427,6 +1444,12 @@ impl Orchestrator {
             .bits
             .iter()
             .filter(|b| b.segment == seg && !b.lines.is_empty() && !self.used_bits.contains(&b.id))
+            // A bit with an arc prerequisite waits for its state.
+            .filter(|b| {
+                b.arc_state
+                    .as_deref()
+                    .is_none_or(|s| self.arc_state.as_deref() == Some(s))
+            })
             .collect();
         deck.sort_by_key(|b| fnv1a64(format!("{}:{}", self.seed, b.id).as_bytes()));
         let bit = if prefer_premise {
@@ -1541,10 +1564,13 @@ impl Orchestrator {
             .map(|(id, q)| (id.clone(), format!("the vote \"{q}\"")))
             .collect();
         self.agenda.sync(LoopKind::Vote, &polls);
+        // A payoff owed from an earlier night (the arc's) stands beside a bit's: it closes
+        // when delivered, not when no bit is being told.
         let payoff: Vec<(String, String)> = self
             .active_bit
             .iter()
             .map(|a| (a.id.clone(), format!("the payoff of {}", a.id)))
+            .chain(self.arc_loop.iter().cloned())
             .collect();
         self.agenda.sync(LoopKind::Payoff, &payoff);
         if !requests.is_empty() && p.mode != BeatMode::Hold {

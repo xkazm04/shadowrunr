@@ -16,6 +16,7 @@ use shadowrunr_types::{
 
 use crate::*;
 
+mod arcs;
 mod flow;
 mod nights;
 mod orchestration;

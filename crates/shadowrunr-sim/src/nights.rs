@@ -21,7 +21,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shadowrunr_brain::moments::line_uses_moment;
 use shadowrunr_brain::{Brain, MemoryStore};
-use shadowrunr_types::{ChatMsg, Engine, SegmentContext, SimRunSpec, Speaker, StreamEvent, TsMs};
+use shadowrunr_types::{
+    ChatMsg, Engine, SegmentContext, SimRunSpec, Speaker, StreamEvent, TsMs, VoteTally,
+};
 
 use crate::runner::{
     brain_tuning, build_brain, execute, prepare, run_stage, temp_memory_dir, Mind,
@@ -80,6 +82,12 @@ impl Mind for NightMind {
             let _ = self.brain.consolidate_now(at).await;
         }
         Ok(())
+    }
+
+    fn vote_closed(&mut self, poll_id: &str, tallies: &[VoteTally], now_ms: TsMs) {
+        let _ = self
+            .brain
+            .confirm_vote(poll_id, tallies, now_ms.saturating_add(self.offset_ms));
     }
 }
 

@@ -374,6 +374,7 @@ fn insert(p: &mut StreamPrep, op: &EditOp) -> Result<(), String> {
                 kind: r.kind,
                 lines,
                 payoff: text(&op.payoff),
+                arc_state: None,
             },
         );
     } else {

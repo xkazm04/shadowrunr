@@ -29,6 +29,7 @@
 //!    chat when `crisis-chat-ban` is enabled (their name is withheld from his lines for the
 //!    rest of the stream). Every line put on air advances the speech clock.
 
+pub mod arc;
 pub mod care;
 pub mod case_names;
 pub mod character;
@@ -349,6 +350,9 @@ pub struct Brain {
     /// Viewers picked this stream: a moment from a past night is offered on a viewer's first
     /// pick only ([`moments`]).
     moment_offered: HashSet<String>,
+    /// The stream's audience-authored arc, when its approved prep carries an approved one
+    /// ([`arc`]).
+    arc: Option<arc::ArcRun>,
 }
 
 impl Brain {
@@ -425,6 +429,7 @@ impl Brain {
             last_consolidation: None,
             habit_shown: Default::default(),
             moment_offered: HashSet::new(),
+            arc: None,
             cfg,
             engine,
             tuning,
@@ -513,7 +518,35 @@ impl Brain {
     /// The approved stream prep for this stream: its cold open, bits and connectors. Without one,
     /// the stream runs on chat and the segment's rules alone.
     pub fn set_prep(&mut self, prep: shadowrunr_types::prep::StreamPrep) {
+        // Its arc runs only when the owner approved it ([`arc::ArcRun::load`]); its state is
+        // read from the memory, so it picks up where the last night left it.
+        self.arc = prep.arc.as_ref().and_then(|d| {
+            arc::ArcRun::load(d, &self.cfg.memory_dir, &self.cfg.stream_id)
+                .ok()
+                .flatten()
+        });
         self.prep = Some(prep);
+    }
+
+    /// The state of the stream's arc, if one runs.
+    pub fn arc_state(&self) -> Option<&str> {
+        self.arc.as_ref().map(arc::ArcRun::state)
+    }
+
+    /// The runtime confirmed a closed poll (its typed tallies). The arc moves only on a poll
+    /// the brain put up for its current vote, won outright by an option a permitted transition
+    /// names; the move is announced by the next beat that can carry it ([`arc`]). Returns the
+    /// event id when the result was taken.
+    pub fn confirm_vote(
+        &mut self,
+        poll_id: &str,
+        tallies: &[shadowrunr_types::VoteTally],
+        now_ms: TsMs,
+    ) -> Result<Option<String>, BrainError> {
+        match self.arc.as_mut() {
+            Some(a) => a.confirm_vote(poll_id, tallies, now_ms),
+            None => Ok(None),
+        }
     }
 
     /// The stream's prep, if one was set.
@@ -1224,6 +1257,10 @@ impl Brain {
         self.working
             .note_viewers(cands.iter().map(|c| c.msg.viewer.name.as_str()));
         // What the beat consumes stands only once its core call is delivered.
+        self.orch.set_arc(
+            self.arc.as_ref().map(|a| a.state().to_string()),
+            self.arc.as_ref().and_then(arc::ArcRun::open_loop),
+        );
         let txn = self.orch.begin();
         let mut plan = self.orch.plan(&BeatInputs {
             now_ms,
@@ -1529,6 +1566,58 @@ impl Brain {
             self.working
                 .voice_section(&pkg.effects, &tags, &picked_names)
         });
+        // The stream's arc: its due beat (an announcement, a consequence, a vote) and the recap a
+        // newcomer is owed, as owner-approved material. Never on a care beat or the goodbye; a
+        // room event's or an owed answer's beat carries no arc beat either.
+        let arc_free = !care_beat && !closing && plan.room_note.is_none() && !plan.is_owed();
+        let arc_cue = self
+            .arc
+            .as_ref()
+            .filter(|_| arc_free)
+            .and_then(|a| a.cue(now_ms, ctx.allowed_ops.iter().any(|o| o == "start_poll")));
+        let newcomers: Vec<(String, String)> = pick
+            .chosen
+            .iter()
+            .filter(|c| c.safety.is_none() && !c.injection)
+            .filter(|c| pctx.first_contacts.contains(&c.msg.id))
+            .filter(|c| !pctx.regulars.contains(&c.msg.viewer.id))
+            .map(|c| (c.msg.viewer.id.clone(), c.msg.viewer.name.clone()))
+            .collect();
+        let arc_recap = self
+            .arc
+            .as_ref()
+            .filter(|_| !care_beat && !closing)
+            .and_then(|a| a.recap_for(&newcomers));
+        let arc_text: String = [
+            arc_cue
+                .as_ref()
+                .and_then(|c| self.arc.as_ref().map(|a| a.material(c))),
+            arc_recap.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let material = match (plan.material.as_deref(), arc_text.is_empty()) {
+            (m, true) => m.map(str::to_string),
+            (Some(m), false) => Some(format!("{}\n{arc_text}", m.trim_end())),
+            (None, false) => Some(arc_text),
+        };
+        let arc_what: Vec<&str> = [
+            arc_cue.as_ref().map(|c| match c {
+                arc::ArcCue::Announce(_) => "announce",
+                arc::ArcCue::Payoff(_) => "consequence",
+                arc::ArcCue::Vote(_) => "vote",
+            }),
+            arc_recap.as_ref().map(|_| "recap"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if !arc_what.is_empty() {
+            if let StreamEvent::BeatPlan { reason, .. } = &mut ev[plan_at] {
+                reason.push_str(&format!("; arc: {}", arc_what.join(", ")));
+            }
+        }
         let waves_now = self.orch.question_waves().clone();
         let prompt = compose_turn(&TurnInputs {
             ctx,
@@ -1544,7 +1633,7 @@ impl Brain {
             fresh_bit,
             brief: self.brief.as_ref(),
             care_note: care.as_deref(),
-            material: plan.material.as_deref(),
+            material: material.as_deref(),
             beat_note: plan.note.as_deref(),
             room_note: plan.room_note.as_deref(),
             agenda: plan.agenda.as_deref(),
@@ -2313,9 +2402,16 @@ impl Brain {
         } else {
             self.moment_acts(&pick, &pctx.owed, &ev, &noted_texts)
         };
+        let aired = !say_idx.is_empty();
         self.record_turn(&turn, now_ms)?;
-        if !acts.is_empty() {
+        // An arc beat counts once it aired: its transition or consequence is written then,
+        // citing this beat's own episode.
+        let arc_aired = aired && arc_cue.is_some();
+        if !acts.is_empty() || arc_aired {
             if let Some(ep) = self.flush_turns(now_ms)? {
+                if let (true, Some(a), Some(cue)) = (arc_aired, self.arc.as_mut(), &arc_cue) {
+                    a.delivered(cue, &ep, now_ms)?;
+                }
                 let seg = compose::seg_wire(ctx.segment);
                 let date = moments::date_of(now_ms);
                 for (viewer, kind, aired, words) in acts {
@@ -2329,6 +2425,24 @@ impl Brain {
                         &ep,
                         now_ms,
                     )?;
+                }
+            }
+        }
+        if let Some(a) = self.arc.as_mut() {
+            if aired && arc_recap.is_some() {
+                a.recapped(newcomers.into_iter().map(|(id, _)| id));
+            }
+            // A poll this beat put up for the arc's vote is the one whose result can move it.
+            for e in &ev {
+                if let StreamEvent::Op {
+                    op:
+                        Op::StartPoll {
+                            poll_id, options, ..
+                        },
+                    ..
+                } = e
+                {
+                    a.note_poll(poll_id, options);
                 }
             }
         }

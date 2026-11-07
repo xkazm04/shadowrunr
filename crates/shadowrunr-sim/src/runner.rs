@@ -29,7 +29,7 @@ use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::Rank;
 use shadowrunr_types::{
     ChatMsg, EndReason, Engine, ModelTier, Op, Role, SegmentContext, SegmentId, SimRunSpec,
-    StreamEvent, TsMs,
+    StreamEvent, TsMs, VoteTally,
 };
 
 use crate::calibration::{self, Calibration, CalibrationOrigin};
@@ -57,6 +57,24 @@ pub trait Mind: Send {
         ctx: &SegmentContext,
     ) -> Result<Vec<StreamEvent>, SimError>;
     async fn end_stream(&mut self, now_ms: TsMs) -> Result<(), SimError>;
+    /// The runtime closed a poll: its typed tallies, as the stage reported them (a `vote`
+    /// event with `closed`). The brain's arc moves only on this ([`shadowrunr_brain::arc`]).
+    fn vote_closed(&mut self, _poll_id: &str, _tallies: &[VoteTally], _now_ms: TsMs) {}
+}
+
+/// The polls the stage reports closed in `evs`, with their tallies.
+pub(crate) fn closed_votes(evs: &[StreamEvent]) -> Vec<(String, Vec<VoteTally>)> {
+    evs.iter()
+        .filter_map(|e| match e {
+            StreamEvent::Vote {
+                poll_id,
+                tallies,
+                closed: true,
+                ..
+            } => Some((poll_id.clone(), tallies.clone())),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The segment runtime, as the loop sees it.
@@ -110,6 +128,10 @@ impl Mind for Brain {
     }
     async fn end_stream(&mut self, now_ms: TsMs) -> Result<(), SimError> {
         Ok(Brain::end_stream(self, now_ms).await?)
+    }
+    fn vote_closed(&mut self, poll_id: &str, tallies: &[VoteTally], now_ms: TsMs) {
+        // A result the arc cannot take is no error: most polls are not the arc's.
+        let _ = self.confirm_vote(poll_id, tallies, now_ms);
     }
 }
 
@@ -790,6 +812,9 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
                 } else {
                     drop_op_echo(&ops, stage.apply_ops(now, &ops))
                 };
+                for (id, tallies) in closed_votes(&staged) {
+                    mind.vote_closed(&id, &tallies, now);
+                }
                 let evs = beat_events(evs, staged);
                 room.observe(t, &evs);
                 w.push_all(evs)?;
@@ -825,6 +850,9 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         }
 
         let ev = stage.tick(now, ccv);
+        for (id, tallies) in closed_votes(&ev) {
+            mind.vote_closed(&id, &tallies, now);
+        }
         room.observe(t, &ev);
         w.push_all(ev)?;
         room.sync_poll(t, stage.open_poll());

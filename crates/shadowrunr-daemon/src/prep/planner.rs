@@ -329,6 +329,7 @@ pub fn parse(reply: &str) -> Option<Material> {
                 .payoff
                 .map(|p| p.trim().to_string())
                 .filter(|p| !p.is_empty()),
+            arc_state: None,
         });
     }
     let mut connectors = Vec::new();

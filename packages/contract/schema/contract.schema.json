@@ -57,6 +57,50 @@
       ],
       "type": "object"
     },
+    "ArcDef": {
+      "description": "One bounded audience-authored arc: viewers' confirmed votes move it from night to night\nthrough the states and transitions the owner approved, and nothing else does (no chat text,\nno model line). See `shadowrunr_brain::arc`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "recap": {
+          "description": "A short factual recap a newcomer gets before taking part.",
+          "type": "string"
+        },
+        "start": {
+          "description": "The state the arc starts in.",
+          "type": "string"
+        },
+        "states": {
+          "items": {
+            "$ref": "#/$defs/ArcStateDef"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/ArcStatus"
+        },
+        "title": {
+          "type": "string"
+        },
+        "transitions": {
+          "items": {
+            "$ref": "#/$defs/ArcTransition"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "status",
+        "recap",
+        "start",
+        "states",
+        "transitions"
+      ],
+      "type": "object"
+    },
     "ArcInfo": {
       "description": "SEG-02A's multi-act arc for a long stream.",
       "properties": {
@@ -107,6 +151,95 @@
         "reveal_gap_pct",
         "reveal_needs_work",
         "recap_cooldown_s"
+      ],
+      "type": "object"
+    },
+    "ArcStateDef": {
+      "description": "One state of an arc.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "payoff": {
+          "description": "The consequence owed on the night after this state is entered; delivered once.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "What is true in this state, one line, for the host.",
+          "type": "string"
+        },
+        "vote": {
+          "$ref": "#/$defs/ArcVote",
+          "description": "The vote that moves the arc on from this state (after its payoff). A state without\none ends the arc."
+        }
+      },
+      "required": [
+        "id",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "ArcStatus": {
+      "description": "Whether an arc may run. Only the owner approves one; a draft is never loaded.",
+      "oneOf": [
+        {
+          "const": "draft",
+          "description": "Written, pending the owner's approval: never run.",
+          "type": "string"
+        },
+        {
+          "const": "approved",
+          "description": "Approved by the owner: a stream with this prep runs it.",
+          "type": "string"
+        }
+      ]
+    },
+    "ArcTransition": {
+      "description": "A permitted move: when the vote of `from` is won by `option`, the arc goes to `to`.",
+      "properties": {
+        "announce": {
+          "description": "What the host announces when it happens (owner-approved; he says it in his words).",
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "option": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "option",
+        "to",
+        "announce"
+      ],
+      "type": "object"
+    },
+    "ArcVote": {
+      "description": "The vote a state puts to the room.",
+      "properties": {
+        "options": {
+          "description": "The options, exactly as the poll offers them; each permitted transition names one.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "question": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "question",
+        "options"
       ],
       "type": "object"
     },
@@ -6168,6 +6301,10 @@
     "PrepBit": {
       "description": "One prepared bit, for one segment.",
       "properties": {
+        "arc_state": {
+          "description": "A prerequisite: the bit is offered only while the prep's [`ArcDef`] stands in this\nstate. Absent: offered whatever the arc (and with no arc).",
+          "type": "string"
+        },
         "id": {
           "type": "string"
         },
@@ -9626,6 +9763,10 @@
         "approved_ms": {
           "format": "int64",
           "type": "integer"
+        },
+        "arc": {
+          "$ref": "#/$defs/ArcDef",
+          "description": "One audience-authored arc the stream runs, when its `status` is `approved`. Omitted\nwhen the stream runs none."
         },
         "bits": {
           "items": {

@@ -53,6 +53,121 @@ pub struct PrepBit {
     /// What lands at the end, so the host knows where the bit goes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payoff: Option<String>,
+    /// A prerequisite: the bit is offered only while the prep's [`ArcDef`] stands in this
+    /// state. Absent: offered whatever the arc (and with no arc).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_state: Option<String>,
+}
+
+/// Whether an arc may run. Only the owner approves one; a draft is never loaded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ArcStatus {
+    /// Written, pending the owner's approval: never run.
+    Draft,
+    /// Approved by the owner: a stream with this prep runs it.
+    Approved,
+}
+
+/// The vote a state puts to the room.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ArcVote {
+    pub question: String,
+    /// The options, exactly as the poll offers them; each permitted transition names one.
+    pub options: Vec<String>,
+}
+
+/// One state of an arc.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ArcStateDef {
+    pub id: String,
+    /// What is true in this state, one line, for the host.
+    pub summary: String,
+    /// The consequence owed on the night after this state is entered; delivered once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payoff: Option<String>,
+    /// The vote that moves the arc on from this state (after its payoff). A state without
+    /// one ends the arc.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vote: Option<ArcVote>,
+}
+
+/// A permitted move: when the vote of `from` is won by `option`, the arc goes to `to`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ArcTransition {
+    pub id: String,
+    pub from: String,
+    pub option: String,
+    pub to: String,
+    /// What the host announces when it happens (owner-approved; he says it in his words).
+    pub announce: String,
+}
+
+/// One bounded audience-authored arc: viewers' confirmed votes move it from night to night
+/// through the states and transitions the owner approved, and nothing else does (no chat text,
+/// no model line). See `shadowrunr_brain::arc`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ArcDef {
+    pub id: String,
+    pub title: String,
+    pub status: ArcStatus,
+    /// A short factual recap a newcomer gets before taking part.
+    pub recap: String,
+    /// The state the arc starts in.
+    pub start: String,
+    pub states: Vec<ArcStateDef>,
+    pub transitions: Vec<ArcTransition>,
+}
+
+/// An arc stays small: at most this many states...
+pub const ARC_MAX_STATES: usize = 8;
+/// ...and this many transitions.
+pub const ARC_MAX_TRANSITIONS: usize = 16;
+
+impl ArcDef {
+    /// The arc is well formed: bounded, its start and every transition's states exist, unique
+    /// ids, and every transition's option is one of its `from` state's vote options.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.states.is_empty() || self.states.len() > ARC_MAX_STATES {
+            return Err(format!("an arc has 1-{ARC_MAX_STATES} states"));
+        }
+        if self.transitions.len() > ARC_MAX_TRANSITIONS {
+            return Err(format!(
+                "an arc has at most {ARC_MAX_TRANSITIONS} transitions"
+            ));
+        }
+        let state = |id: &str| self.states.iter().find(|s| s.id == id);
+        if state(&self.start).is_none() {
+            return Err(format!("start state {:?} is not defined", self.start));
+        }
+        for (i, s) in self.states.iter().enumerate() {
+            if self.states[..i].iter().any(|o| o.id == s.id) {
+                return Err(format!("state {:?} is defined twice", s.id));
+            }
+        }
+        for (i, t) in self.transitions.iter().enumerate() {
+            if self.transitions[..i].iter().any(|o| o.id == t.id) {
+                return Err(format!("transition {:?} is defined twice", t.id));
+            }
+            let Some(from) = state(&t.from) else {
+                return Err(format!("transition {:?}: no state {:?}", t.id, t.from));
+            };
+            if state(&t.to).is_none() {
+                return Err(format!("transition {:?}: no state {:?}", t.id, t.to));
+            }
+            let offered = from
+                .vote
+                .as_ref()
+                .is_some_and(|v| v.options.iter().any(|o| o == &t.option));
+            if !offered {
+                return Err(format!(
+                    "transition {:?}: {:?} is not an option of {:?}'s vote",
+                    t.id, t.option, t.from
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Where a connector line bridges.
@@ -110,6 +225,10 @@ pub struct StreamPrep {
     /// plays no Table Read; SEG-01 then hands over to SEG-02A.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table_read: Option<crate::scene::TableReadPlan>,
+    /// One audience-authored arc the stream runs, when its `status` is `approved`. Omitted
+    /// when the stream runs none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc: Option<ArcDef>,
     pub checks: Vec<PrepCheck>,
     /// Set on approval.
     #[serde(default, skip_serializing_if = "Option::is_none")]
