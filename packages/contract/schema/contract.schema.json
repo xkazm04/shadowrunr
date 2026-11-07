@@ -3475,6 +3475,52 @@
       ],
       "type": "object"
     },
+    "EffectCardDraft": {
+      "description": "A draft effect card the inbox proposes when one kind of beat keeps drawing the owner's\nflat, repetitive, off-tone or broke-character marks. Data only: nothing writes it into\n`effects.toml`; the owner writes the effect and commits the card, or ignores it.",
+      "properties": {
+        "effect": {
+          "description": "The intended effect, for the owner to write: always empty in a draft (never the marked\ndialogue, which would become a line to copy).",
+          "type": "string"
+        },
+        "marks": {
+          "description": "How many marks of each draft category the key gathered.",
+          "items": {
+            "$ref": "#/$defs/MarkCount"
+          },
+          "type": "array"
+        },
+        "refs": {
+          "description": "The marked lines.",
+          "items": {
+            "$ref": "#/$defs/LineRef"
+          },
+          "type": "array"
+        },
+        "retirement": {
+          "description": "When a committed card is retired.",
+          "type": "string"
+        },
+        "segment": {
+          "$ref": "#/$defs/SegmentId",
+          "description": "Condition: the segment they share."
+        },
+        "situation": {
+          "$ref": "#/$defs/LineSituation",
+          "description": "Condition: the chat situation they share (absent: no chat, or none derivable)."
+        },
+        "source": {
+          "$ref": "#/$defs/BeatSource",
+          "description": "Condition: the beat source the marked lines share (absent: no beat preceded them)."
+        }
+      },
+      "required": [
+        "effect",
+        "marks",
+        "refs",
+        "retirement"
+      ],
+      "type": "object"
+    },
     "Effort": {
       "enum": [
         "low",
@@ -5089,6 +5135,24 @@
         }
       ]
     },
+    "LineRef": {
+      "description": "A marked line a draft cites: the Review session and the 1-based transcript line. Never its\ntext: a card carries no dialogue.",
+      "properties": {
+        "line": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "line"
+      ],
+      "type": "object"
+    },
     "LineSituation": {
       "description": "The situation tags a bank line may carry; each beat is classified into the same words.",
       "enum": [
@@ -5215,6 +5279,24 @@
       "required": [
         "reply",
         "directives_added"
+      ],
+      "type": "object"
+    },
+    "MarkCount": {
+      "description": "How many of a key's lines carry one mark.",
+      "properties": {
+        "lines": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tag": {
+          "$ref": "#/$defs/FeedbackTag"
+        }
+      },
+      "required": [
+        "tag",
+        "lines"
       ],
       "type": "object"
     },
@@ -10017,8 +10099,16 @@
           },
           "type": "array"
         },
+        "drafts": {
+          "default": [],
+          "description": "Draft effect cards: a (source, segment, situation) key with 3 or more lines marked\nflat, repetitive, off-tone or broke-character. Absent from older daemons.",
+          "items": {
+            "$ref": "#/$defs/EffectCardDraft"
+          },
+          "type": "array"
+        },
         "suggestions": {
-          "description": "Lines marked `flat` or `too_mean`, with the owner's note: direction suggestions.",
+          "description": "Lines marked `flat`, `too_mean`, `repetitive`, `off_tone` or `broke_character`, with\nthe owner's note: direction suggestions, each keyed by its beat source, segment and\nsituation.",
           "items": {
             "$ref": "#/$defs/ToneReviewItem"
           },
@@ -10220,12 +10310,20 @@
         "note": {
           "type": "string"
         },
+        "segment": {
+          "$ref": "#/$defs/SegmentId",
+          "description": "The segment the line was spoken in; absent before any `segment_start`."
+        },
         "session_id": {
           "type": "string"
         },
         "situation": {
           "$ref": "#/$defs/LineSituation",
           "description": "The most specific situation of the chat the line answers; absent when none is\nderivable or the beat carried no roast material (a viewer in care)."
+        },
+        "source": {
+          "$ref": "#/$defs/BeatSource",
+          "description": "What the line's beat was for (its `beat_plan` source, or the one its reason names in an\nolder transcript); absent when no beat precedes the line."
         },
         "tags": {
           "description": "The owner's marks on the line (empty without feedback).",

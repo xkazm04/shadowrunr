@@ -4812,7 +4812,14 @@ export interface ToneInbox {
    */
   candidates: ToneReviewItem[];
   /**
-   * Lines marked `flat` or `too_mean`, with the owner's note: direction suggestions.
+   * Draft effect cards: a (source, segment, situation) key with 3 or more lines marked
+   * flat, repetitive, off-tone or broke-character. Absent from older daemons.
+   */
+  drafts?: EffectCardDraft[];
+  /**
+   * Lines marked `flat`, `too_mean`, `repetitive`, `off_tone` or `broke_character`, with
+   * the owner's note: direction suggestions, each keyed by its beat source, segment and
+   * situation.
    */
   suggestions: ToneReviewItem[];
 }
@@ -4832,8 +4839,10 @@ export interface ToneReviewItem {
    */
   line: number;
   note?: string;
+  segment?: SegmentId;
   session_id: string;
   situation?: LineSituation;
+  source?: BeatSource;
   /**
    * The owner's marks on the line (empty without feedback).
    */
@@ -4843,6 +4852,57 @@ export interface ToneReviewItem {
    * The session's tone (`stream_start.tone_variant`).
    */
   tone: string;
+}
+/**
+ * A draft effect card the inbox proposes when one kind of beat keeps drawing the owner's
+ * flat, repetitive, off-tone or broke-character marks. Data only: nothing writes it into
+ * `effects.toml`; the owner writes the effect and commits the card, or ignores it.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "EffectCardDraft".
+ */
+export interface EffectCardDraft {
+  /**
+   * The intended effect, for the owner to write: always empty in a draft (never the marked
+   * dialogue, which would become a line to copy).
+   */
+  effect: string;
+  /**
+   * How many marks of each draft category the key gathered.
+   */
+  marks: MarkCount[];
+  /**
+   * The marked lines.
+   */
+  refs: LineRef[];
+  /**
+   * When a committed card is retired.
+   */
+  retirement: string;
+  segment?: SegmentId;
+  situation?: LineSituation;
+  source?: BeatSource;
+}
+/**
+ * How many of a key's lines carry one mark.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "MarkCount".
+ */
+export interface MarkCount {
+  lines: number;
+  tag: FeedbackTag;
+}
+/**
+ * A marked line a draft cites: the Review session and the 1-based transcript line. Never its
+ * text: a card carries no dialogue.
+ *
+ * This interface was referenced by `RpcMethods`'s JSON-Schema
+ * via the `definition` "LineRef".
+ */
+export interface LineRef {
+  line: number;
+  session_id: string;
 }
 /**
  * `tone.lines.add`: append a line to the bank, with the next id of the file's scheme.

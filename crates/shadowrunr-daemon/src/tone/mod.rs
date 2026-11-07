@@ -462,6 +462,7 @@ pub fn inbox(cfg: &Config, character: &str) -> Result<ToneInbox, RpcError> {
     }
     let mut candidates = Vec::new();
     let mut suggestions = Vec::new();
+    let mut marked = Vec::new();
     for (sid, rows) in inbox::by_session(folded(cfg)?) {
         let events = match session_events(cfg, &sid) {
             Ok(ev) => ev,
@@ -480,6 +481,9 @@ pub fn inbox(cfg: &Config, character: &str) -> Result<ToneInbox, RpcError> {
             if f.tags.iter().any(|t| inbox::SUGGESTION_TAGS.contains(t)) {
                 suggestions.push(item.clone());
             }
+            if f.tags.iter().any(|t| inbox::DRAFT_TAGS.contains(t)) {
+                marked.push(item.clone());
+            }
             if f.tags.iter().any(|t| inbox::CANDIDATE_TAGS.contains(t))
                 && !banked.contains(&bank::normalize(&item.text).to_lowercase())
             {
@@ -490,6 +494,8 @@ pub fn inbox(cfg: &Config, character: &str) -> Result<ToneInbox, RpcError> {
     Ok(ToneInbox {
         candidates: inbox::newest_first(candidates),
         suggestions: inbox::newest_first(suggestions),
+        // Drafts read every marked line, not only the newest INBOX_MAX.
+        drafts: inbox::drafts(&marked),
     })
 }
 

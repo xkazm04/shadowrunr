@@ -224,6 +224,53 @@ pub struct ToneReviewItem {
     /// When the feedback was given; absent without feedback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at_ms: Option<TsMs>,
+    /// What the line's beat was for (its `beat_plan` source, or the one its reason names in an
+    /// older transcript); absent when no beat precedes the line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::prep::BeatSource>,
+    /// The segment the line was spoken in; absent before any `segment_start`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment: Option<crate::SegmentId>,
+}
+
+/// How many of a key's lines carry one mark.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MarkCount {
+    pub tag: FeedbackTag,
+    pub lines: u32,
+}
+
+/// A marked line a draft cites: the Review session and the 1-based transcript line. Never its
+/// text: a card carries no dialogue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LineRef {
+    pub session_id: String,
+    pub line: u64,
+}
+
+/// A draft effect card the inbox proposes when one kind of beat keeps drawing the owner's
+/// flat, repetitive, off-tone or broke-character marks. Data only: nothing writes it into
+/// `effects.toml`; the owner writes the effect and commits the card, or ignores it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EffectCardDraft {
+    /// Condition: the beat source the marked lines share (absent: no beat preceded them).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::prep::BeatSource>,
+    /// Condition: the segment they share.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment: Option<crate::SegmentId>,
+    /// Condition: the chat situation they share (absent: no chat, or none derivable).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub situation: Option<LineSituation>,
+    /// The intended effect, for the owner to write: always empty in a draft (never the marked
+    /// dialogue, which would become a line to copy).
+    pub effect: String,
+    /// How many marks of each draft category the key gathered.
+    pub marks: Vec<MarkCount>,
+    /// The marked lines.
+    pub refs: Vec<LineRef>,
+    /// When a committed card is retired.
+    pub retirement: String,
 }
 
 /// `tone.inbox` result, newest first in each list.
@@ -231,6 +278,12 @@ pub struct ToneReviewItem {
 pub struct ToneInbox {
     /// Lines marked `great_roast` or `landed`, not yet in their tone's bank: bank candidates.
     pub candidates: Vec<ToneReviewItem>,
-    /// Lines marked `flat` or `too_mean`, with the owner's note: direction suggestions.
+    /// Lines marked `flat`, `too_mean`, `repetitive`, `off_tone` or `broke_character`, with
+    /// the owner's note: direction suggestions, each keyed by its beat source, segment and
+    /// situation.
     pub suggestions: Vec<ToneReviewItem>,
+    /// Draft effect cards: a (source, segment, situation) key with 3 or more lines marked
+    /// flat, repetitive, off-tone or broke-character. Absent from older daemons.
+    #[serde(default)]
+    pub drafts: Vec<EffectCardDraft>,
 }
