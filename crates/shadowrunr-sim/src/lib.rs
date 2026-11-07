@@ -27,6 +27,7 @@ pub mod judge;
 pub mod judging;
 pub mod ledger;
 pub mod matrix;
+pub mod nights;
 pub mod outcome;
 pub mod pacing;
 pub mod population;
@@ -47,6 +48,7 @@ use shadowrunr_types::prep::StreamPrep;
 use shadowrunr_types::reconcile::StreamBrief;
 use shadowrunr_types::{Command, Engine, JudgeVerdict, ModelTier, Rank, SimRunSpec};
 
+pub use nights::{run_nights_with, NightsReport};
 pub use outcome::{classify, RunClass};
 pub use pacing::{FleetQuota, PaceClock, QuotaBlock, QuotaGate};
 pub use runner::{judge_existing, prep_label, run_one_with, Mind, RunRecord, RunStatus, Stage};

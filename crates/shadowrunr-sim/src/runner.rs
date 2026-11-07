@@ -376,6 +376,9 @@ pub(crate) struct Prepared {
     pub case: Option<StagedCase>,
     /// The Table Read the run plays (SEG-03, or SEG-01's handover with a prep plan).
     pub table_read: Option<TableRead>,
+    /// The seed the run's population is drawn from, when it is not the spec's: the nights of a
+    /// multi-night run share one population and draw fresh chat ([`crate::nights`]).
+    pub pop_seed: Option<u64>,
 }
 
 /// `<run_dir>/judge-windows/`: the windowed judge's stored window replies (a re-judge after an
@@ -662,6 +665,7 @@ pub(crate) fn prepare_in(
         brief,
         case,
         table_read,
+        pop_seed: None,
     })
 }
 
@@ -692,7 +696,7 @@ pub(crate) async fn execute<M: Mind, S: Stage>(
         &spec.population,
         spec.audience_size,
         spec.duration_s,
-        spec.seed,
+        prep.pop_seed.unwrap_or(spec.seed),
         opts.hooks.rank,
     )?;
     let mut room = ChatRoom::with_propose_min_rank(
@@ -1041,6 +1045,23 @@ pub(crate) async fn build_brain(
     Ok(brain)
 }
 
+/// The segment runtime a simulated run plays: the whole run is one segment.
+pub(crate) fn run_stage(prep: &Prepared) -> Result<SegmentRuntime, SimError> {
+    let spec = &prep.spec;
+    let mut config = SegmentConfig {
+        start_ms: Some(0),
+        // The whole run is one segment: a long SEG-02A run plays the case's arc.
+        planned_s: Some(spec.duration_s),
+        ..segment_config(prep)?
+    };
+    if let Some(case) = &prep.case {
+        // A simulation is private: an unapproved real case may run (and is marked).
+        config = config.with_staged_case(case, StreamKind::PrivateSim);
+    }
+    SegmentRuntime::with_config(spec.segment, config)
+        .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))
+}
+
 pub(crate) fn temp_memory_dir(run_id: &str) -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1088,18 +1109,7 @@ pub async fn run_one_with(
     let res = async {
         std::fs::create_dir_all(&memory_dir)
             .map_err(|e| SimError::Io(format!("{}: {e}", memory_dir.display())))?;
-        let mut config = SegmentConfig {
-            start_ms: Some(0),
-            // The whole run is one segment: a long SEG-02A run plays the case's arc.
-            planned_s: Some(spec.duration_s),
-            ..segment_config(&prep)?
-        };
-        if let Some(case) = &prep.case {
-            // A simulation is private: an unapproved real case may run (and is marked).
-            config = config.with_staged_case(case, StreamKind::PrivateSim);
-        }
-        let stage = SegmentRuntime::with_config(spec.segment, config)
-            .map_err(|e| SimError::Spec(format!("segment runtime: {e}")))?;
+        let stage = run_stage(&prep)?;
         let brain = build_brain(
             &prep,
             opts,

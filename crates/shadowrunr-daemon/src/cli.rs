@@ -422,6 +422,12 @@ pub struct SimRunArgs {
     /// demo case. A sim is private: an unapproved case runs and the run is marked.
     #[arg(long, value_name = "CASE_ID")]
     pub case: Option<String>,
+    /// Run this many consecutive streams ("nights") sharing one memory directory and one
+    /// population (fresh chat each night, the clock a day apart, the sleep cycle forced
+    /// between nights). Each night lands in <out>/<run_id>/<run_id>-n<k>/, with nights.json
+    /// (shown-to-used per returning viewer) beside them.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=30))]
+    pub nights: u32,
 }
 
 #[derive(Debug, Args)]
@@ -1370,15 +1376,51 @@ async fn sim_run(cfg: &Config, a: SimRunArgs) -> Result<ExitCode, String> {
     warn_unapproved_case(&opts)?;
     let engine = EngineHandle::build(cfg, a.scripted);
     eprintln!(
-        "sim run {} ({} engine) -> {}",
+        "sim run {} ({} engine{}) -> {}",
         spec.run_id,
         if engine.is_scripted() {
             "scripted"
         } else {
             "live"
         },
+        if a.nights > 1 {
+            format!(", {} nights", a.nights)
+        } else {
+            String::new()
+        },
         run_dir.display()
     );
+    if a.nights > 1 {
+        let (outs, report) = Box::pin(shadowrunr_sim::run_nights_with(
+            spec,
+            a.nights,
+            out,
+            engine.engine,
+            &opts,
+        ))
+        .await
+        .map_err(|e| e.to_string())?;
+        for (row, res) in report.nights.iter().zip(&outs) {
+            println!(
+                "night {}: {} ({} receipts, {} moments offered, verdict: {})",
+                row.night,
+                row.run_dir.display(),
+                row.receipts,
+                row.moments_offered,
+                if res.verdict.is_some() {
+                    "judged"
+                } else {
+                    "none"
+                }
+            );
+        }
+        println!(
+            "nights: {}",
+            run_dir.join(shadowrunr_sim::nights::NIGHTS_FILE).display()
+        );
+        print!("{}", report.table());
+        return Ok(ExitCode::SUCCESS);
+    }
     let res = run_one_with(spec, out, engine.engine, &opts)
         .await
         .map_err(|e| e.to_string())?;
@@ -1842,6 +1884,24 @@ mod tests {
         assert_eq!(a.port, None);
         let a = sandbox_args(&["stream", "sandbox", "--minutes", "30", "--chaos", "OUTAGE"]);
         assert_eq!(a.chaos, Some(SandboxChaos::Outage));
+    }
+
+    #[test]
+    fn sim_run_takes_a_night_count() {
+        let nights = |args: &[&str]| match parse(args).unwrap().command {
+            Command::Sim(SimCommand::Run(a)) => a.nights,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            nights(&["sim", "run", "--scripted"]),
+            1,
+            "one night by default"
+        );
+        assert_eq!(nights(&["sim", "run", "--scripted", "--nights", "3"]), 3);
+        for bad in ["0", "31", "two"] {
+            let e = parse(&["sim", "run", "--nights", bad]).unwrap_err();
+            assert_eq!(e.exit_code(), 2, "{bad}: {e}");
+        }
     }
 
     #[test]

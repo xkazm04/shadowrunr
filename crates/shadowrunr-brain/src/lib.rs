@@ -37,6 +37,7 @@ pub mod fleet;
 pub mod grammar;
 pub mod memory;
 pub mod moderation;
+pub mod moments;
 pub mod orchestrate;
 pub mod outgate;
 pub mod pace;
@@ -345,6 +346,9 @@ pub struct Brain {
     /// Habit id -> (beat it was last shown, its `updated_ms` then): the cooldown against
     /// re-showing an unchanged habit every beat.
     habit_shown: std::collections::HashMap<String, (u64, TsMs)>,
+    /// Viewers picked this stream: a moment from a past night is offered on a viewer's first
+    /// pick only ([`moments`]).
+    moment_offered: HashSet<String>,
 }
 
 impl Brain {
@@ -420,6 +424,7 @@ impl Brain {
             last_reply: None,
             last_consolidation: None,
             habit_shown: Default::default(),
+            moment_offered: HashSet::new(),
             cfg,
             engine,
             tuning,
@@ -731,9 +736,11 @@ impl Brain {
         Ok(out)
     }
 
-    fn flush_turns(&mut self, now_ms: TsMs) -> Result<(), BrainError> {
+    /// Write the pending turns as one Stream episode; its id, or `None` when nothing was
+    /// pending.
+    fn flush_turns(&mut self, now_ms: TsMs) -> Result<Option<String>, BrainError> {
         if self.turns.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
         let text = std::mem::take(&mut self.turns).join("\n");
         let ep = shadowrunr_types::Episode {
@@ -744,7 +751,8 @@ impl Brain {
             text,
             importance: 3,
         };
-        self.store.write_episode(&ep)
+        self.store.write_episode(&ep)?;
+        Ok(Some(ep.id))
     }
 
     /// The beat's core call failed: the orchestrator un-consumes the beat ([`Orchestrator::rollback`]),
@@ -1345,12 +1353,42 @@ impl Brain {
             .map(|p| (p.id.clone(), p.key.clone()))
             .collect();
         let mut seen_viewers = HashSet::new();
+        // A disclosure or a care ask in the beat: no past night is brought up.
+        let care_beat = pick.chosen.iter().any(|c| {
+            c.safety.is_some() || situational_asks(&c.msg.text).iter().any(|a| a.is_care())
+        });
+        let seg = compose::seg_wire(ctx.segment);
+        let mut moment_ids: Vec<String> = Vec::new();
         for c in &pick.chosen {
             let v = &c.msg.viewer;
             if !seen_viewers.insert(v.id.clone()) {
                 continue;
             }
-            let facts = self.store.viewer_facts(&v.id, VIEWER_FACTS)?;
+            // Moments are offered on their own terms below, never as briefing facts.
+            let (moments, mut facts): (Vec<StoredFact>, Vec<StoredFact>) = self
+                .store
+                .viewer_facts(&v.id, VIEWER_FACTS + 8)?
+                .into_iter()
+                .partition(|f| moments::is_moment_key(&f.fact.key));
+            facts.truncate(VIEWER_FACTS);
+            // A returning viewer's first pick this stream: at most one moment from a past night.
+            let first = self.moment_offered.insert(v.id.clone());
+            let moment = (first && !care_beat && !c.injection)
+                .then(|| moments::choose_moment(&moments, &self.cfg.stream_id, &seg, &c.msg.text))
+                .flatten()
+                .cloned();
+            let moment_line = moment.as_ref().map(|m| {
+                format!(
+                    "[{}] {} (episode {})",
+                    m.fact.key,
+                    m.fact.value,
+                    m.fact.sources.first().map_or("", String::as_str)
+                )
+            });
+            if let Some(m) = moment {
+                moment_ids.push(m.fact.id.clone());
+                facts.push(m);
+            }
             recalled_ids.extend(facts.iter().map(|f| f.fact.id.clone()));
             memo_keys.extend(
                 facts
@@ -1362,7 +1400,12 @@ impl Brain {
                 name: v.name.clone(),
                 title: pkg.rank_titles.title(v.rank),
                 months: v.months,
-                facts: facts.iter().map(|f| one_line(&f.fact.value, 200)).collect(),
+                facts: facts
+                    .iter()
+                    .filter(|f| !moments::is_moment_key(&f.fact.key))
+                    .map(|f| one_line(&f.fact.value, 200))
+                    .collect(),
+                moment: moment_line,
             });
         }
         let mut query = String::new();
@@ -1385,7 +1428,9 @@ impl Brain {
                 .viewer_id
                 .as_ref()
                 .is_some_and(|v| seen_viewers.contains(v));
-            if !in_brief && !facts.iter().any(|x| x.fact.id == f.fact.id) {
+            // A moment is its viewer's own, offered once: never recalled by search.
+            let moment = moments::is_moment_key(&f.fact.key);
+            if !in_brief && !moment && !facts.iter().any(|x| x.fact.id == f.fact.id) {
                 facts.push(f);
             }
         }
@@ -1526,7 +1571,7 @@ impl Brain {
                 .filter(|l| !l.starts_with(THIS_STREAM_LABEL))
                 .collect(),
             viewers: briefing.iter().map(|b| b.id.clone()).collect(),
-            moments: Vec::new(),
+            moments: moment_ids,
         });
 
         // The turn record that becomes part of the next stream episode. It is replayed into
@@ -1821,6 +1866,8 @@ impl Brain {
         // The guest's line waits for the host line after it: it airs with that line, and goes
         // with it when that line cannot air (the host has the last word).
         let mut held_guest: Option<(String, String)> = None;
+        // This beat's NOTE lines as they passed the gate (a NOTE naming a pick is a moment).
+        let mut noted_texts: Vec<String> = Vec::new();
         let drop_guest = |held: &mut Option<(String, String)>, ev: &mut Vec<StreamEvent>| {
             if held.take().is_some() {
                 ev.push(moderation::output_event(
@@ -2012,6 +2059,7 @@ impl Brain {
                         .map(|(id, _)| id.clone())
                         .collect();
                     self.store.mark_used(&used, now_ms)?;
+                    noted_texts.push(lower);
                 }
                 Line::Rejected { rule, .. } => {
                     ev.push(moderation::output_event(now_ms, &rule, "rejected"));
@@ -2258,7 +2306,32 @@ impl Brain {
         // Newly dispatched jobs report "queued" in the same beat.
         self.collect_jobs(now_ms, &mut ev)?;
 
+        // On-show moments: the typed acts this beat aired an answer to ([`moments`]). Their
+        // source is this beat's own episode, flushed now so it exists on disk.
+        let acts = if crisis || sad {
+            Vec::new()
+        } else {
+            self.moment_acts(&pick, &pctx.owed, &ev, &noted_texts)
+        };
         self.record_turn(&turn, now_ms)?;
+        if !acts.is_empty() {
+            if let Some(ep) = self.flush_turns(now_ms)? {
+                let seg = compose::seg_wire(ctx.segment);
+                let date = moments::date_of(now_ms);
+                for (viewer, kind, aired, words) in acts {
+                    let value = moments::moment_value(kind, &seg, &date, &aired, &words);
+                    moments::write_moment(
+                        &self.store,
+                        &viewer,
+                        &self.cfg.stream_id,
+                        kind,
+                        &value,
+                        &ep,
+                        now_ms,
+                    )?;
+                }
+            }
+        }
         if self
             .ticks
             .is_multiple_of(u64::from(self.tuning.episode_every_ticks.max(1)))
@@ -2266,6 +2339,60 @@ impl Brain {
             self.flush_turns(now_ms)?;
         }
         Ok(ev)
+    }
+
+    /// The beat's on-show acts, one per viewer, the strongest: (viewer id, kind, his aired line
+    /// answering it, their words). A pick counts only when an aired line answers it
+    /// (`replying_to`); a disclosure or an injection never counts.
+    fn moment_acts(
+        &self,
+        pick: &Pick,
+        owed: &[String],
+        ev: &[StreamEvent],
+        noted: &[String],
+    ) -> Vec<(String, moments::MomentKind, String, String)> {
+        use moments::MomentKind;
+        let mut out: Vec<(String, MomentKind, String, String)> = Vec::new();
+        for c in pick
+            .chosen
+            .iter()
+            .filter(|c| c.safety.is_none() && !c.injection)
+        {
+            let Some(aired) = ev.iter().find_map(|e| match e {
+                StreamEvent::Say {
+                    speaker: Speaker::Host,
+                    text,
+                    replying_to,
+                    ..
+                } if replying_to.contains(&c.msg.id) => Some(text.clone()),
+                _ => None,
+            }) else {
+                continue;
+            };
+            let v = &c.msg.viewer;
+            let proposal = matches!(
+                c.msg.command,
+                Some(shadowrunr_types::Command::Propose { .. })
+            ) && v.rank >= self.tuning.filter.propose_min_rank;
+            let id = v.id.to_lowercase();
+            let kind = if proposal {
+                MomentKind::Proposal
+            } else if moderation::is_gift_or_sub(&c.msg.text) {
+                MomentKind::Gift
+            } else if owed.contains(&c.msg.id) {
+                MomentKind::Request
+            } else if id.chars().count() >= 2 && noted.iter().any(|n| n.contains(&id)) {
+                MomentKind::Noted
+            } else {
+                continue;
+            };
+            match out.iter_mut().find(|(vid, ..)| vid == &v.id) {
+                Some(o) if o.1 >= kind => {}
+                Some(o) => *o = (v.id.clone(), kind, aired, c.msg.text.clone()),
+                None => out.push((v.id.clone(), kind, aired, c.msg.text.clone())),
+            }
+        }
+        out
     }
 
     /// Run the sleep cycle now, regardless of pressure.

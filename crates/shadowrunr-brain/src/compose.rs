@@ -162,7 +162,7 @@ const MAX_TOPICS: usize = 12;
 const MAX_DIRECTIVES: usize = 24;
 
 /// `SEG-01`, `SEG-02A`: the wire name.
-fn seg_wire(seg: SegmentId) -> String {
+pub(crate) fn seg_wire(seg: SegmentId) -> String {
     serde_json::to_value(seg)
         .ok()
         .and_then(|v| v.as_str().map(str::to_string))
@@ -406,6 +406,9 @@ pub struct ViewerBrief {
     pub title: String,
     pub months: u32,
     pub facts: Vec<String>,
+    /// One moment from a past night, offered on the viewer's first pick of a stream
+    /// ([`crate::moments`]): `[key] value (episode <id>)`. Rendered inside the memory fence.
+    pub moment: Option<String>,
 }
 
 pub struct TurnInputs<'a> {
@@ -1004,12 +1007,24 @@ pub fn compose_turn(t: &TurnInputs<'_>) -> String {
             },
             v.id
         ));
-        if v.facts.is_empty() {
+        if v.facts.is_empty() && v.moment.is_none() {
             brief.push_str(": no memories yet\n");
         } else {
-            brief.push_str(": see what you remember about them under Memory\n");
+            brief.push_str(": see what you remember about them under Memory");
+            if v.moment.is_some() {
+                brief.push_str("; ");
+                brief.push_str(crate::moments::RECOGNITION_NOTE);
+            }
+            brief.push('\n');
             for f in &v.facts {
                 remembered.push_str(&format!("- [id {}] {}\n", inert(&v.id, 80), inert(f, 200)));
+            }
+            if let Some(m) = &v.moment {
+                remembered.push_str(&format!(
+                    "- [id {}] from a past night: {}\n",
+                    inert(&v.id, 80),
+                    inert(m, 320)
+                ));
             }
         }
     }
@@ -1335,6 +1350,7 @@ mod tests {
             title: "Warlock".into(),
             months: 3,
             facts: vec![attack.into(), "brought a rubber chicken".into()],
+            moment: None,
         }];
         let pkg = pkg();
         let nonce = 0xabc_u64;

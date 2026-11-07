@@ -15,6 +15,12 @@ pub fn fnv1a64(bytes: &[u8]) -> u64 {
 
 /// (year, month) of a Unix-epoch millisecond timestamp (proleptic Gregorian, UTC).
 pub fn year_month(ts_ms: i64) -> (i64, u32) {
+    let (y, m, _) = ymd(ts_ms);
+    (y, m)
+}
+
+/// (year, month, day) of a Unix-epoch millisecond timestamp (proleptic Gregorian, UTC).
+pub fn ymd(ts_ms: i64) -> (i64, u32, u32) {
     let days = ts_ms.div_euclid(86_400_000);
     // Howard Hinnant's civil_from_days.
     let z = days + 719_468;
@@ -24,9 +30,10 @@ pub fn year_month(ts_ms: i64) -> (i64, u32) {
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
-    (y, m as u32)
+    (y, m as u32, d as u32)
 }
 
 /// Lowercase, keep alphanumerics, collapse everything else into single spaces.
@@ -81,7 +88,7 @@ pub fn similarity(a: &str, b: &str) -> f64 {
     inter / union
 }
 
-const STOPWORDS: &[&str] = &[
+pub(crate) const STOPWORDS: &[&str] = &[
     "the", "and", "for", "you", "your", "are", "was", "but", "not", "with", "this", "that", "have",
     "has", "had", "what", "who", "how", "why", "when", "where", "can", "will", "just", "they",
     "them", "his", "her", "its", "our", "out", "all", "any", "get", "got", "lol", "lmao", "from",
