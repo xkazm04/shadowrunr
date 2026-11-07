@@ -1,0 +1,71 @@
+{
+ "schema": "conform-run/1",
+ "worker": "f3d6508a-013c-4b2c-bab7-2f04f16c01b4",
+ "subject": "repo-manifest-standard",
+ "evaluatedAt": "2026-11-07T22:05:53.800710+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "contract-package",
+   "subject": "repo-manifest-standard",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "packages/contract/schema/contract.schema.json:11449 This package is the daemon\u2194console/stage wire-format schema (RPC methods, event frames), not a contract the repository carries about itself, so the subject's precondition does not hold; grep over packages/contract found no `capabilities`/`capability`, `manifest_version`, `contract_version` or `schemaVersion`, and the only `manifest` hits are the unrelated `CharacterManifest` def and a render-file kind string.",
+   "techniques": [
+    {
+     "technique": "capability-not-tool-vocabulary",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/src/index.ts:1 The package declares no capability\u2192command map. Its fields are RPC methods and payload shapes, not repository capabilities."
+    },
+    {
+     "technique": "generated-from-provenance",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/scripts/check.mjs:33 Not a manifest. The same discipline does exist here: the check re-exports the schema, regenerates it into a temp directory and compares it with the committed bytes, and every generated file carries a provenance banner (codegen.mjs:24)."
+    },
+    {
+     "technique": "must-ignore-unknown",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/schema/contract.schema.json:11448 The schema's root object and 102 of its object defs are closed. That would be a deviation for a manifest read by many tools, but this is a wire schema validated at one in-repo door (door.ts), which is the single-reader case the subject itself carves out."
+    },
+    {
+     "technique": "spec-ships-with-artifact",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/scripts/check.mjs:43 The schema is committed in the repo and a drift gate fails when it diverges from its Rust source. That is the same idea, but it is not a manifest specification."
+    },
+    {
+     "technique": "semver-additive-evolution",
+     "verdict": "not-applicable",
+     "evidence": "packages/contract/schema/contract.schema.json:11446 The contract's identity is a name rather than a URL, but there is no contract-version field. Console, stage and generated code are regenerated together in one commit, which the technique's 'when not to use' clause covers."
+    }
+   ],
+   "absenceTerms": [
+    "capabilities",
+    "contract_version",
+    "schemaVersion"
+   ],
+   "registryProposal": "The registry map paired this wire-format schema package with repo-manifest-standard, probably because it matched on tokens like 'contract', 'generated' and 'check'. Some techniques here (generated-from-provenance's drift check, must-ignore-unknown versus version-gate-precedes-schema-gate, and semver identity+version) also govern daemon wire contracts. That points to a gap in the map or the corpus: a wire/API-contract subject should govern this context instead. Measured against such a subject, the missing contract-version field next to `$id` would be the first thing to judge."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-07T22:05:53.800710+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "repo-manifest-standard"
+   ],
+   "techniques": [
+    "capability-not-tool-vocabulary",
+    "generated-from-provenance",
+    "must-ignore-unknown",
+    "semver-additive-evolution",
+    "spec-ships-with-artifact"
+   ],
+   "deviations": 0,
+   "context": "contract-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
