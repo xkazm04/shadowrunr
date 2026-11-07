@@ -92,6 +92,7 @@ use compose::{compose_turn, stable_prefix_with_brief, TurnInputs, ViewerBrief};
 use fleet::{FleetVerdict, FleetWatch};
 use grammar::{op_tag, parse_reply, Line, Spoken};
 use moderation::{InputFilter, Policy, RemovedNames, CRISIS_BAN_RULE};
+use orchestrate::case::{self, is_case_op};
 use orchestrate::requests::{claims_authority, situational_asks, Ask};
 use orchestrate::{BeatInputs, BeatTxn, Orchestrator, ROLLED_BACK};
 use outgate::{GateCtx, Surface};
@@ -855,6 +856,75 @@ impl Brain {
 
     /// A foil's line goes on air: its repetition window, the turn record, its reading time on
     /// the speech clock and its `say`.
+    /// An op of a delivered beat goes out: research is dispatched (its job id assigned), a
+    /// card's text passes the gate, and the working set and the orchestrator note it.
+    fn air_op(
+        &mut self,
+        now_ms: TsMs,
+        tag: String,
+        mut op: Op,
+        crisis: bool,
+        turn: &mut Vec<String>,
+        ev: &mut Vec<StreamEvent>,
+    ) {
+        match &mut op {
+            Op::DispatchResearch { job_id, brief } => {
+                let assigned = self.dispatch_research(Some(job_id.clone()), brief);
+                *job_id = assigned;
+            }
+            Op::ShowCard { title, body, .. } => {
+                let gate = GateCtx {
+                    now_ms,
+                    policy: &self.policy,
+                    hexes: &self.hexes,
+                    names: &self.case_names,
+                    crisis,
+                    removed: &self.removed_names,
+                    recent: &[],
+                };
+                for field in [title, body] {
+                    let g = outgate::pass(Surface::Card, field, &gate, &mut |t| t.to_string());
+                    ev.extend(g.events);
+                    *field = g.text.unwrap_or_default();
+                }
+            }
+            _ => {}
+        }
+        self.working.apply_op(&op, now_ms);
+        self.orch.note_op(&op, now_ms);
+        turn.push(format!("[op {tag}]"));
+        debug_assert_eq!(op_tag(&op), tag);
+        ev.push(StreamEvent::Op { ts_ms: now_ms, op });
+    }
+
+    /// A case op whose explaining line did not air: not emitted, its move carried or skipped
+    /// ([`case::CaseDesk::withhold`]), with a [`case::CASE_DELIVERY_RULE`] record. A reveal's
+    /// grade, counted for the beat's lines, is put back.
+    fn withhold_case_op(
+        &mut self,
+        now_ms: TsMs,
+        op: &Op,
+        hexes_before: &[HexInfo],
+        ev: &mut Vec<StreamEvent>,
+    ) {
+        if let Op::RevealHex { hex, .. } = op {
+            match hexes_before.iter().find(|h| &h.id == hex) {
+                Some(prev) => {
+                    if let Some(h) = self.hexes.iter_mut().find(|h| &h.id == hex) {
+                        h.grade = prev.grade;
+                    }
+                }
+                None => self.hexes.retain(|h| &h.id != hex),
+            }
+        }
+        let w = self.orch.withhold_op(op, now_ms);
+        ev.push(moderation::output_event(
+            now_ms,
+            case::CASE_DELIVERY_RULE,
+            w.action(),
+        ));
+    }
+
     fn air_foil(
         &mut self,
         now_ms: TsMs,
@@ -1610,6 +1680,17 @@ impl Brain {
                 .collect()
         };
         let before_pace = spoken_texts(&lines);
+        // A case move and the spoken line explaining it are one delivery unit: the op airs only
+        // once that line has aired, past the pace trim, the lag ceiling and the output gate;
+        // otherwise the move is carried to the next eligible beat ([`case::CaseDesk::withhold`]).
+        let case_ops = lines
+            .iter()
+            .any(|l| matches!(l, Line::Op { op, .. } if is_case_op(&op.0)));
+        let explanation: Option<String> = if case_ops {
+            explaining_line(&lines, if with_chat { 2 } else { 1 }, &self.case_names)
+        } else {
+            None
+        };
         // The beat's speech budget: spoken lines past it go whole, the last first; a guest's
         // turn and the host's answer to it are kept ahead of the rest. An unpaced beat airs whole.
         let paced_budget = if unpaced { usize::MAX } else { budget };
@@ -1644,16 +1725,10 @@ impl Brain {
             // first and the string second, before the op or after it (tuning-4ae84b1b/after
             // SEG-02A.a300.s1 L871-L875, tuning-7bc8556c/after SEG-02A.a30.s1 L519-L523); a
             // solo beat names the string in its first line, so it keeps the one-line hold.
-            let pins = lines.iter().any(|l| {
-                matches!(
-                    l,
-                    Line::Op {
-                        op: grammar::OpBox(Op::PinLink { .. }),
-                        ..
-                    }
-                )
-            });
-            let held = if with_chat && pins { 2 } else { 1 };
+            // Every case move is held the same way as the pin (dispatch, reveal and show lost
+            // their lines to the trim too, BATCH-1-SUMMARY): its line is in the held span, and
+            // the op airs only with that line ([`explaining_line`]).
+            let held = if with_chat && case_ops { 2 } else { 1 };
             over = pace::over_budget_holding(&lens, paced_budget, held)
                 .into_iter()
                 .map(|k| spoken_at[k])
@@ -1724,7 +1799,9 @@ impl Brain {
         let guard_repeats = reply.engine != EngineKind::Scripted;
         self.last_reply = Some(reply);
 
-        // Grades revealed this beat count for lines in the same beat.
+        // Grades revealed this beat count for lines in the same beat (put back for a reveal
+        // held back for want of its line).
+        let hexes_before = self.hexes.clone();
         for l in &lines {
             if let Line::Op { op, .. } = l {
                 if let Op::RevealHex { hex, grade } = &op.0 {
@@ -1748,6 +1825,10 @@ impl Brain {
         // The guest's line waits for the host line after it: it airs with that line, and goes
         // with it when that line cannot air (the host has the last word).
         let mut held_guest: Option<(String, String)> = None;
+        // Whether the explaining line aired (`None`: not reached yet), and the case ops waiting
+        // for it.
+        let mut explained: Option<bool> = None;
+        let mut waiting_ops: Vec<(String, Op)> = Vec::new();
         let drop_guest = |held: &mut Option<(String, String)>, ev: &mut Vec<StreamEvent>| {
             if held.take().is_some() {
                 ev.push(moderation::output_event(
@@ -1767,6 +1848,8 @@ impl Brain {
                     if is_close && held_guest.is_none() {
                         continue;
                     }
+                    let is_explanation =
+                        explained.is_none() && explanation.as_deref() == Some(text.as_str());
                     // A rank read out in brackets ("WraithKettle (Thrall), ...") becomes a
                     // spoken title ("WraithKettle the Thrall"); the cue still fits the line.
                     let (text, unbracketed) =
@@ -1807,6 +1890,9 @@ impl Brain {
                     ev.extend(g.events);
                     suppressed += usize::from(g.repeated);
                     let Some(out) = g.text else {
+                        if is_explanation {
+                            explained = Some(false);
+                        }
                         drop_guest(&mut held_guest, &mut ev);
                         continue;
                     };
@@ -1843,6 +1929,12 @@ impl Brain {
                         first_text_ms: None,
                         delivery,
                     });
+                    if is_explanation {
+                        explained = Some(true);
+                        for (tag, op) in std::mem::take(&mut waiting_ops) {
+                            self.air_op(now_ms, tag, op, crisis, &mut turn, &mut ev);
+                        }
+                    }
                 }
                 Line::Foil { foil, text } => {
                     let gate = GateCtx {
@@ -1872,37 +1964,14 @@ impl Brain {
                     }
                 }
                 Line::Op { tag, op } => {
-                    let mut op = op.0;
-                    match &mut op {
-                        Op::DispatchResearch { job_id, brief } => {
-                            let assigned = self.dispatch_research(Some(job_id.clone()), brief);
-                            *job_id = assigned;
-                        }
-                        Op::ShowCard { title, body, .. } => {
-                            let gate = GateCtx {
-                                now_ms,
-                                policy: &self.policy,
-                                hexes: &self.hexes,
-                                names: &self.case_names,
-                                crisis,
-                                removed: &self.removed_names,
-                                recent: &[],
-                            };
-                            for field in [title, body] {
-                                let g = outgate::pass(Surface::Card, field, &gate, &mut |t| {
-                                    t.to_string()
-                                });
-                                ev.extend(g.events);
-                                *field = g.text.unwrap_or_default();
-                            }
-                        }
-                        _ => {}
+                    let op = op.0;
+                    if !is_case_op(&op) || explained == Some(true) {
+                        self.air_op(now_ms, tag, op, crisis, &mut turn, &mut ev);
+                    } else if explained.is_none() && explanation.is_some() {
+                        waiting_ops.push((tag, op));
+                    } else {
+                        self.withhold_case_op(now_ms, &op, &hexes_before, &mut ev);
                     }
-                    self.working.apply_op(&op, now_ms);
-                    self.orch.note_op(&op, now_ms);
-                    turn.push(format!("[op {tag}]"));
-                    debug_assert_eq!(op_tag(&op), tag);
-                    ev.push(StreamEvent::Op { ts_ms: now_ms, op });
                 }
                 Line::Note(text) => {
                     let gate = GateCtx {
@@ -1935,6 +2004,10 @@ impl Brain {
             }
         }
         drop_guest(&mut held_guest, &mut ev);
+        // The explaining line never aired (trimmed, lagged or withheld): its ops are held back.
+        for (_, op) in std::mem::take(&mut waiting_ops) {
+            self.withhold_case_op(now_ms, &op, &hexes_before, &mut ev);
+        }
 
         // A scene aside always acknowledges its room event: when the model's line could not
         // air (the repetition guard took it), an engine line speaks
@@ -2230,4 +2303,73 @@ impl Brain {
         }
         Ok(())
     }
+}
+
+/// The ids a case op is about: a dispatch's card (its brief's first word), a reveal's card, a
+/// string's cards and record, a record put on screen.
+fn op_subjects(op: &Op) -> Vec<&str> {
+    match op {
+        Op::DispatchResearch { brief, .. } => brief
+            .split_whitespace()
+            .next()
+            .map(|w| w.trim_end_matches([':', ',']))
+            .into_iter()
+            .collect(),
+        Op::RevealHex { hex, .. } => vec![hex.as_str()],
+        Op::PinLink {
+            from,
+            to,
+            record_id,
+            ..
+        } => vec![from.as_str(), to.as_str(), record_id.as_str()],
+        Op::ShowScreen {
+            record_id: Some(r), ..
+        } => vec![r.as_str()],
+        _ => Vec::new(),
+    }
+}
+
+/// The host line that explains the beat's case move, by its exact text: among the first `held`
+/// spoken lines (the span the pace trim keeps), the one naming the move's card or record (by id
+/// or by its spoken name) nearest the op; else the nearest before the op; else the first after
+/// it. `None` when the reply has no host line there: the op then airs without an explanation,
+/// so it is held back.
+fn explaining_line(lines: &[Line], held: usize, names: &CaseNames) -> Option<String> {
+    let op_at = lines
+        .iter()
+        .position(|l| matches!(l, Line::Op { op, .. } if is_case_op(&op.0)))?;
+    let Line::Op { op, .. } = &lines[op_at] else {
+        return None;
+    };
+    let terms: Vec<String> = op_subjects(&op.0)
+        .into_iter()
+        .flat_map(|id| {
+            let mut t = vec![id.to_lowercase()];
+            if let Some(n) = names.spoken_name(id).filter(|n| n.chars().count() >= 4) {
+                t.push(n.to_lowercase());
+            }
+            t
+        })
+        .collect();
+    let window: Vec<(usize, &str)> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| matches!(l, Line::Say(_) | Line::Foil { .. }))
+        .take(held.max(1))
+        .filter_map(|(i, l)| match l {
+            Line::Say(Spoken { text, .. }) => Some((i, text.as_str())),
+            _ => None,
+        })
+        .collect();
+    let naming = window
+        .iter()
+        .filter(|(_, t)| {
+            let lower = t.to_lowercase();
+            terms.iter().any(|w| lower.contains(w.as_str()))
+        })
+        .min_by_key(|(i, _)| i.abs_diff(op_at));
+    naming
+        .or_else(|| window.iter().rev().find(|(i, _)| *i < op_at))
+        .or_else(|| window.iter().find(|(i, _)| *i > op_at))
+        .map(|(_, t)| t.to_string())
 }

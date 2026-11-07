@@ -1185,6 +1185,12 @@ impl Orchestrator {
         self.case.note_op(op, now_ms);
     }
 
+    /// A case op of a delivered beat held back because its explaining line did not air: the move
+    /// is carried to the next eligible beat, a bounded number of times ([`case::CaseDesk::withhold`]).
+    pub fn withhold_op(&mut self, op: &shadowrunr_types::Op, now_ms: TsMs) -> case::Withheld {
+        self.case.withhold(op, now_ms)
+    }
+
     /// Whether `viewer_id` already got an answer to this kind of ask this stream (before this
     /// beat's commit).
     pub fn has_asked(&self, viewer_id: &str, ask: Ask) -> bool {

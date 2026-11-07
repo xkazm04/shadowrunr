@@ -58,6 +58,19 @@ pub const CASE_PAYOFF_MS: i64 = 15_000;
 /// A case beat whose reply carried no case op is asked again after this long (assumption: two
 /// beats).
 pub const CASE_RETRY_MS: i64 = 10_000;
+/// How many times a case move whose explaining line could not air (trimmed, lagged or withheld
+/// by the output gate) is carried to the next eligible beat before it is skipped (assumption:
+/// two retries, so a busy stretch costs the move one [`CASE_BEAT_MS`] at most).
+pub const CASE_CARRY_MAX: u32 = 2;
+/// The output rule recording a case op held back because its explaining line did not air.
+pub const CASE_DELIVERY_RULE: &str = "case_delivery";
+/// [`CASE_DELIVERY_RULE`] action: the move is carried to the next eligible beat.
+pub const CASE_DEFERRED: &str = "deferred";
+/// [`CASE_DELIVERY_RULE`] action: the move was carried [`CASE_CARRY_MAX`] times and is skipped
+/// (parked [`CASE_BEAT_MS`]).
+pub const CASE_SKIPPED: &str = "skipped";
+/// [`CASE_DELIVERY_RULE`] action: an op no directive asked for lost its line and is dropped.
+pub const CASE_UNEXPLAINED: &str = "unexplained";
 /// Heading of the per-turn case section.
 pub const CASE_HEADING: &str = "The case";
 /// The beat note of a case beat that answers no chat.
@@ -172,6 +185,43 @@ fn rank(g: EvidenceGrade) -> u8 {
         EvidenceGrade::Rep => 1,
         EvidenceGrade::Clm => 2,
         EvidenceGrade::Spc => 3,
+    }
+}
+
+/// Whether `op` moves the case (a dispatch, a reveal, a string, or a record put on screen): a
+/// move that airs only with its explaining line ([`CASE_DELIVERY_RULE`]).
+pub fn is_case_op(op: &Op) -> bool {
+    matches!(
+        op,
+        Op::DispatchResearch { .. }
+            | Op::RevealHex { .. }
+            | Op::PinLink { .. }
+            | Op::ShowScreen {
+                record_id: Some(_),
+                ..
+            }
+    )
+}
+
+/// What became of a case op held back because its explaining line did not air.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Withheld {
+    /// The move asked for is carried to the next eligible beat (its tag).
+    Deferred(String),
+    /// The move was carried [`CASE_CARRY_MAX`] times already: skipped, parked [`CASE_BEAT_MS`].
+    Skipped(String),
+    /// No directive asked for it: nothing to carry.
+    Unprompted,
+}
+
+impl Withheld {
+    /// The [`CASE_DELIVERY_RULE`] action recording it.
+    pub fn action(&self) -> &'static str {
+        match self {
+            Withheld::Deferred(_) => CASE_DEFERRED,
+            Withheld::Skipped(_) => CASE_SKIPPED,
+            Withheld::Unprompted => CASE_UNEXPLAINED,
+        }
     }
 }
 
@@ -469,6 +519,11 @@ pub struct CaseDesk {
     parked: HashMap<String, Parked>,
     /// The summaries of research that came back, lowercase: what the records name.
     results: Vec<String>,
+    /// A move whose op was held back because its line did not air: due on the next eligible
+    /// beat, whatever the case clocks say.
+    deferred: Option<CaseMove>,
+    /// How many times each move (by tag) was held back so far, until it airs or is skipped.
+    carries: HashMap<String, u32>,
 }
 
 /// How long a declined or ignored move waits.
@@ -540,6 +595,7 @@ impl CaseDesk {
             }
             if declined || Self::answers(&mv, op) {
                 self.ignored.remove(&mv.tag());
+                self.carries.remove(&mv.tag());
                 self.pending = None;
             }
         }
@@ -554,6 +610,33 @@ impl CaseDesk {
                 self.last_move_ms = Some(now_ms);
             }
             _ => {}
+        }
+    }
+
+    /// A case op of a delivered beat was held back: its explaining line did not air (the pace
+    /// trim, the lag ceiling or the output gate took it). The move asked for is not settled and
+    /// does not count as ignored: it is carried to the next eligible beat, at most
+    /// [`CASE_CARRY_MAX`] times, then skipped (parked [`CASE_BEAT_MS`]). An op no directive asked
+    /// for is only dropped.
+    pub fn withhold(&mut self, op: &Op, now_ms: TsMs) -> Withheld {
+        let Some((mv, _)) = self.pending.clone().filter(|(mv, _)| Self::answers(mv, op)) else {
+            return Withheld::Unprompted;
+        };
+        self.pending = None;
+        let tag = mv.tag();
+        let n = self.carries.entry(tag.clone()).or_insert(0);
+        *n += 1;
+        if *n > CASE_CARRY_MAX {
+            self.carries.remove(&tag);
+            self.deferred = None;
+            self.parked.insert(
+                tag.clone(),
+                Parked::Until(now_ms.saturating_add(CASE_BEAT_MS)),
+            );
+            Withheld::Skipped(tag)
+        } else {
+            self.deferred = Some(mv);
+            Withheld::Deferred(tag)
         }
     }
 
@@ -596,9 +679,19 @@ impl CaseDesk {
             Parked::FaceUp(n) => face_up <= *n,
         });
         let parked = self.parked.clone();
-        self.candidates(ctx)
+        let open: Vec<CaseMove> = self
+            .candidates(ctx)
             .into_iter()
-            .find(|m| !parked.contains_key(&m.tag()))
+            .filter(|m| !parked.contains_key(&m.tag()))
+            .collect();
+        // A move carried from a beat that could not air its line goes first, while still open.
+        if let Some(d) = self.deferred.take() {
+            if let Some(m) = open.iter().find(|m| m.tag() == d.tag()) {
+                self.deferred = Some(m.clone());
+                return Some(m.clone());
+            }
+        }
+        open.into_iter().next()
     }
 
     /// Every open move, in order: reveals, strings, research, records to show.
@@ -751,6 +844,10 @@ impl CaseDesk {
     /// Whether `mv` is due at `now_ms`: [`CASE_BEAT_MS`] since the last case move
     /// ([`CASE_PAYOFF_MS`] for a payoff), and [`CASE_RETRY_MS`] since the last directive.
     pub fn due(&self, mv: &CaseMove, now_ms: TsMs) -> bool {
+        // A carried move is due on the next eligible beat.
+        if self.deferred.as_ref().is_some_and(|d| d.tag() == mv.tag()) {
+            return true;
+        }
         let since = |t: Option<TsMs>| t.map_or(i64::MAX, |t| now_ms.saturating_sub(t));
         let wait = if mv.is_payoff() {
             CASE_PAYOFF_MS
@@ -771,6 +868,7 @@ impl CaseDesk {
     ) -> String {
         self.asks += 1;
         self.last_ask_ms = Some(now_ms);
+        self.deferred = None;
         self.pending = Some((mv.clone(), face_up));
         mv.directive(&format!("case-{}", self.asks), names)
     }

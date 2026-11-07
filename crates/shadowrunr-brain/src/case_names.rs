@@ -137,6 +137,17 @@ impl CaseNames {
         self.card(id).or_else(|| self.record(id))
     }
 
+    /// The name `id` is said by aloud (a card's or record's shown name up to its first comma),
+    /// when the catalog knows it.
+    pub fn spoken_name(&self, id: &str) -> Option<&str> {
+        self.any(id).map(Named::spoken)
+    }
+
+    /// Every card's and record's spoken name, in catalog order (cards first).
+    pub fn spoken_names(&self) -> impl Iterator<Item = &str> {
+        self.cards.iter().chain(&self.records).map(Named::spoken)
+    }
+
     /// `id` as the prompt shows it: `Name [ID]`, or the bare id when unknown.
     pub fn tagged(&self, id: &str) -> String {
         match self.any(id) {
