@@ -130,6 +130,20 @@ pub fn worn_phrases<S: AsRef<str>>(lines: &[S], min_lines: usize, max: usize) ->
     kept.into_iter().take(max).map(|(p, _)| p).collect()
 }
 
+/// Whether a worn phrase is made of names (`names`: the words of the live case's cards and
+/// records, its research crew and the rank titles): every word of it that is not a stopword is
+/// one of them. Such a phrase is how the case and the room are called, not a tic, so the voice
+/// section never tells him to stop saying it. The judge's tic share ([`tic_flags`]) still counts
+/// it: this only shapes the prompt.
+fn made_of_names(phrase: &str, names: &HashSet<String>) -> bool {
+    let words = phrase_words(phrase);
+    let content: Vec<&String> = words
+        .iter()
+        .filter(|w| !STOPWORDS.contains(&w.as_str()))
+        .collect();
+    !content.is_empty() && content.iter().all(|w| names.contains(w.as_str()))
+}
+
 /// Heading of the voice section's effects (the per-turn block, never the prefix).
 pub const EFFECTS_HEADING: &str = "What lands here:";
 /// Heading of the worn-out phrases.
@@ -239,6 +253,8 @@ pub struct WorkingSet {
     /// Viewer names seen in chat lately, newest last, for the opener guard.
     viewer_names: VecDeque<String>,
     ttl_ms: i64,
+    /// Words of the names the worn-phrase list spares ([`Self::set_name_words`]).
+    name_words: HashSet<String>,
 }
 
 impl Default for WorkingSet {
@@ -258,6 +274,7 @@ impl WorkingSet {
             heard: VecDeque::new(),
             viewer_names: VecDeque::new(),
             ttl_ms,
+            name_words: HashSet::new(),
         }
     }
 
@@ -324,7 +341,11 @@ impl WorkingSet {
         );
         chosen.truncate(EFFECTS_PER_BEAT);
         let heard: Vec<String> = self.heard.iter().cloned().collect();
-        let worn = worn_phrases(&heard, TIC_MIN_LINES, TIC_MAX_SHOWN);
+        let worn: Vec<String> = worn_phrases(&heard, TIC_MIN_LINES, usize::MAX)
+            .into_iter()
+            .filter(|p| !made_of_names(p, &self.name_words))
+            .take(TIC_MAX_SHOWN)
+            .collect();
         let mut all_names: Vec<String> = names.to_vec();
         all_names.extend(self.viewer_names.iter().cloned());
         let opener = opener_repeat(&heard, &all_names);
@@ -348,6 +369,20 @@ impl WorkingSet {
             s.push('\n');
         }
         Some(s)
+    }
+
+    /// The names this beat's worn-phrase list leaves alone: the live case's card and record
+    /// names, the research crew's name and the rank titles ([`made_of_names`]). Replaced every
+    /// beat; empty, nothing is spared.
+    pub fn set_name_words<I, S>(&mut self, names: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.name_words = names
+            .into_iter()
+            .flat_map(|n| phrase_words(n.as_ref()))
+            .collect();
     }
 
     /// Whether a research job is still out.
@@ -671,6 +706,45 @@ mod tests {
             text: format!("the {tag} effect"),
             ..Default::default()
         }
+    }
+
+    /// S1: the case's names, its research crew and the rank titles are how the case and the
+    /// room are called: the prompt never lists them as worn out, while a real tic in the same
+    /// lines still is. The judge's tic share reads the same lines unchanged.
+    #[test]
+    fn case_names_are_never_listed_as_worn_out_and_tic_flags_still_count_them() {
+        let lines = [
+            "The bone-clerks ride for Ashpetal Holdings Ltd, by the rotting moon.",
+            "Ashpetal Holdings Ltd again, by the rotting moon, my Thrall.",
+            "The bone-clerks are back for Ashpetal Holdings Ltd, my Thrall.",
+        ];
+        let mut ws = WorkingSet::default();
+        for l in lines {
+            ws.remember_line(l);
+        }
+        let before = ws.voice_section(&[], &["quiet"], &[]).unwrap();
+        assert!(
+            before.contains("ashpetal holdings ltd") && before.contains("the bone clerks"),
+            "{before}"
+        );
+        ws.set_name_words([
+            "Ashpetal Holdings Ltd",
+            "Glimmerquay Yield Syndicate",
+            "bone-clerk",
+            "bone-clerks",
+            "Thrall",
+        ]);
+        let s = ws.voice_section(&[], &["quiet"], &[]).unwrap();
+        let worn = s
+            .lines()
+            .find(|l| l.starts_with(WORN_OUT_HEADING))
+            .expect("a real tic is still named");
+        assert!(worn.contains("\"by the rotting moon\""), "{worn}");
+        for name in ["ashpetal", "holdings", "bone", "clerks", "thrall"] {
+            assert!(!worn.contains(name), "{name} listed as worn out: {worn}");
+        }
+        // The judge's measure is untouched: the case-name repeats still flag.
+        assert_eq!(tic_flags(&lines, TIC_WINDOW), [false, true, true]);
     }
 
     #[test]

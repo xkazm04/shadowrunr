@@ -441,3 +441,44 @@ async fn golden_turns(b: &mut Brain, engine: &FakeEngine) -> String {
     }
     out
 }
+
+/// S1, in the beat: with a case on the board, the worn-out list never names its cards, its
+/// research crew or a rank title, while a phrase he really wore out is still named.
+#[tokio::test]
+async fn with_a_case_in_context_no_case_name_is_listed_as_worn_out() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = FakeEngine::new();
+    let mut b = brain_with(dir.path(), Arc::new(engine.clone()), "worn", unpaced()).await;
+    let mut c = dispatch_ctx();
+    c.allowed_ops = vec!["highlight".into()];
+    for (k, line) in [
+        "The bone-clerks ride for Ashpetal Holdings Ltd, by the rotting moon.",
+        "Glimmerquay Yield Syndicate again, by the rotting moon, my Thrall.",
+        "The bone-clerks circle Ashpetal Holdings Ltd and the Glimmerquay Yield Syndicate, Thrall.",
+        "Ravens nest in the archive tonight.",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        engine.push(Role::CoreThread, Ok(line));
+        b.tick(1_000 + k as i64 * 5_000, Vec::new(), &c)
+            .await
+            .unwrap();
+    }
+    let p = last_core_prompt(&engine);
+    let worn = p
+        .lines()
+        .find(|l| l.starts_with(working::WORN_OUT_HEADING))
+        .unwrap_or_else(|| panic!("a worn-out list: {p}"));
+    assert!(worn.contains("by the rotting moon"), "{worn}");
+    for name in [
+        "ashpetal",
+        "glimmerquay",
+        "syndicate",
+        "bone",
+        "clerks",
+        "thrall",
+    ] {
+        assert!(!worn.contains(name), "{name}: {worn}");
+    }
+}

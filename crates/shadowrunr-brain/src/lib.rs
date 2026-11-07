@@ -1482,6 +1482,32 @@ impl Brain {
             .iter()
             .map(|c| c.msg.viewer.name.clone())
             .collect();
+        // Case names, the research crew and the rank titles are how the case and the room
+        // are called: the worn-phrase list leaves them alone (never generated aliases).
+        let rank_names = [
+            shadowrunr_types::Rank::Thrall,
+            shadowrunr_types::Rank::Acolyte,
+            shadowrunr_types::Rank::Cultist,
+            shadowrunr_types::Rank::Warlock,
+            shadowrunr_types::Rank::Lich,
+            shadowrunr_types::Rank::DreadCouncil,
+        ]
+        .map(|r| pkg.rank_titles.title(r));
+        let live_case = !ctx.hexes.is_empty() && !self.case_names.is_empty();
+        let case_words: Vec<String> = if live_case {
+            self.case_names
+                .spoken_names()
+                .map(str::to_string)
+                .chain([
+                    pkg.persona.researcher.clone(),
+                    pkg.persona.researchers.clone(),
+                ])
+                .collect()
+        } else {
+            Vec::new()
+        };
+        self.working
+            .set_name_words(case_words.into_iter().chain(rank_names));
         let voice = compose::beat_effect_tags(
             &pick.chosen,
             &pctx.first_contacts,
