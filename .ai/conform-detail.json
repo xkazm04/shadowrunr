@@ -8892,6 +8892,58 @@
         "at": "2026-11-08T00:17:53.202224+00:00",
         "reason": "reviewer (sonnet): The anchor (draw.ts:1) is only a comment about canvas drawing. It doesn't show that a giveaway-draw precondition is absent, so it's an incidental anchor for the not-applicable."
       }
+    },
+    "68cf95a7-438b-4ed9-930d-c19201eb0610/video-assembly": {
+      "context": "voice-sidecar",
+      "subject": "video-assembly",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-08",
+      "evaluatedTs": "2026-11-08T23:25:25.079Z",
+      "worker": "4a724897-1a43-4b59-9e8e-359bcb5e051f",
+      "techniques": [
+        {
+          "technique": "alignment-names-its-text",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/visemes.py:408 Mouth-shape timing comes from the engine's own printed token batches and durations, with no speech recognition round trip; only the spoken index space exists, so authored and spoken alignments cannot be confused. The spans do not label their index space."
+        },
+        {
+          "technique": "silent-defects-get-a-code-or-an-error",
+          "verdict": "conformant",
+          "evidence": "tools/voice/shadowrunr_voice/engine.py:172 Move one holds for referenced inputs: a missing or wrong voices file makes the voice dead with a named reason and no fallback. Move two has no composition source to lint. A zero-sample render has no guard; see notes."
+        },
+        {
+          "technique": "drift-correction",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/visemes.py:167 No clip has a mark or a stored offset and there is no correction control; the only sync adjustment is this fixed, measured 55 ms lead applied at the source."
+        },
+        {
+          "technique": "gap-and-refusal-honesty",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:11 A failed line leaves as a protocol error; this context has no cut or working surface on which a gap could be drawn."
+        },
+        {
+          "technique": "multitrack-timeline-discipline",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:17 One ordered stream of sentences, with no lanes, ruler or timeline surface."
+        },
+        {
+          "technique": "verify-cheapest-artifact-first",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:114 Nothing is compiled from a composition, and a render is one sentence at faster than real time, so there is no expensive export to defer."
+        },
+        {
+          "technique": "unreferenced-channels-resample",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:32 No generator emits sound jointly with picture; the voice is a stored asset selected by file and sid, which the technique's own exclusion covers."
+        },
+        {
+          "technique": "derived-turn-markers",
+          "verdict": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:36 The only timeline here is a single sentence's mouth shapes; there are no act turns, chapters or other structural markers."
+        }
+      ],
+      "registryProposal": "alignment-names-its-text only names character-indexed alignments returned by a synthesiser. An engine that exposes token ids and per-token durations, as here, has a single spoken index space and could be named as a case where the authored-versus-spoken choice does not arise."
     }
   }
 }

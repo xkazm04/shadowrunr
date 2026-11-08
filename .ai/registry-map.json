@@ -7189,7 +7189,11 @@
           "revision": 20,
           "changedAt": "2026-10-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "tools/voice/shadowrunr_voice/sidecar.py:9 The sidecar's only output is one sentence of PCM with optional mouth shapes on a live stdio stream, and git grep over every tracked file in tools/voice found no hit for video, ffmpeg, multitrack, storyboard or music, so nothing here assembles material into a cut.",
+          "evaluatedAt": "2026-11-08",
+          "evaluatedAgainst": "sha256-b2:b47fafe05146f90b",
+          "evaluatedRevision": 23
         }
       ],
       "governance": "governed"
