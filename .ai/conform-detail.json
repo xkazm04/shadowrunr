@@ -8861,6 +8861,37 @@
           "evidence": "apps/console/src/pages/reconcile/layer2.test.tsx:158 The only emitted 'text' is RPC JSON produced by the data layer's serializer; no shell, config or paste artifacts. The substring match over JSON is still a near-side check: it would not catch the key landing at the wrong nesting level."
         }
       ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/verifiable-giveaway-draws": {
+      "context": "console-simulator-page",
+      "subject": "verifiable-giveaway-draws",
+      "bundle": "media-generation",
+      "state": "unknown",
+      "evaluatedAt": "2026-11-08",
+      "evaluatedTs": "2026-11-08T00:16:51.679Z",
+      "techniques": [
+        {
+          "technique": "freeze-and-announce-before-randomness",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/draw.ts:1 This file renders a canvas scene. There is no entry list to freeze and no on-air draw."
+        },
+        {
+          "technique": "public-beacon-round-after-margin",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:3 \"Tournaments\" here are simulation runs shown as tiles. Nothing consumes public randomness."
+        },
+        {
+          "technique": "unbiased-weighted-sampling",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:1 Nothing selects winners from weighted entries. The page lists tournaments and runs, worst first."
+        }
+      ],
+      "withdrawn": {
+        "worker": "c1accbe0-0c61-436e-8c42-5382e40fc81a",
+        "state": "not-applicable",
+        "at": "2026-11-08T00:17:53.202224+00:00",
+        "reason": "reviewer (sonnet): The anchor (draw.ts:1) is only a comment about canvas drawing. It doesn't show that a giveaway-draw precondition is absent, so it's an incidental anchor for the not-applicable."
+      }
     }
   }
 }
