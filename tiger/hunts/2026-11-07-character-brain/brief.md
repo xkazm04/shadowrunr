@@ -263,7 +263,7 @@ None are reverts.
   belong in characters/malakor, not in the engine.
 - Out of scope: the console UI, stage and avatar rendering, the voice sidecar, the v2 rebuild,
   and Twitch platform adapters (except as a seam the brain emits to).
-- LLM-powered area: see C:/Users/kazda/.claude/skills/tiger/references/llm-lens.md for the engine
+- LLM-powered area: see the tiger skill's `references/llm-lens.md` for the engine
   checklist lens.
 - Registry standards that govern this area: media-generation/on-stream-persona-continuity
   (anti-repetition-window, cited-memory-with-tombstones, owner-brief-below-the-constitution,
