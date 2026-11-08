@@ -1,0 +1,24 @@
+{
+  "id": "2026-11-07-character-brain",
+  "area": [
+    "crates/shadowrunr-brain",
+    "characters"
+  ],
+  "head": "24039f7d182721b102ad094c7365a29327ada62d",
+  "created": "2026-11-07T20:47:00.685Z",
+  "rounds": {
+    "1": {
+      "started": "2026-11-07T20:57:30.181Z",
+      "seats": {},
+      "finished": "2026-11-07T21:09:36.626Z",
+      "stray_changes": 0
+    },
+    "2": {
+      "started": "2026-11-07T21:09:58.142Z",
+      "seats": {},
+      "finished": "2026-11-07T21:16:51.869Z",
+      "stray_changes": 0
+    }
+  },
+  "seats": "codex:gpt-6.1-sol@xhigh,claude:claude-opus-5-5@xhigh,agy:gemini-3.8-flash@high"
+}

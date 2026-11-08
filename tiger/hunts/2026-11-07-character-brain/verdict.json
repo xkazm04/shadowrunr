@@ -1,0 +1,119 @@
+{
+  "thesis": "Make Malakor's humour an engine contract and his memory real: the lines the engine demands land as jokes, nothing mid-delivery is amputated, memory stops locking itself, and night two becomes a show that remembers and can be measured.",
+  "judge": "claude-opus-5-5",
+  "kept": [
+    "P06",
+    "P17",
+    "P18",
+    "P10",
+    "P14",
+    "P02",
+    "P19",
+    "P08",
+    "P03",
+    "P15",
+    "P01",
+    "P07",
+    "P12",
+    "P16",
+    "P09",
+    "P11",
+    "P04",
+    "P13"
+  ],
+  "items": {
+    "C1": [
+      "P06",
+      "P17",
+      "P18"
+    ],
+    "C2": [
+      "P10",
+      "P14",
+      "P02"
+    ],
+    "C3": [
+      "P19",
+      "P08",
+      "P03",
+      "P15"
+    ],
+    "S1": [
+      "P01"
+    ],
+    "S2": [
+      "P07"
+    ],
+    "S3": [
+      "P12"
+    ],
+    "L1": [
+      "P16",
+      "P09",
+      "P11",
+      "P04"
+    ],
+    "L2": [
+      "P13"
+    ]
+  },
+  "approved_items": [
+    "C1",
+    "C2",
+    "C3",
+    "S1",
+    "S3",
+    "L1",
+    "L2"
+  ],
+  "approved": [
+    "P06",
+    "P17",
+    "P18",
+    "P10",
+    "P14",
+    "P02",
+    "P19",
+    "P08",
+    "P03",
+    "P15",
+    "P01",
+    "P12",
+    "P16",
+    "P09",
+    "P11",
+    "P04",
+    "P13"
+  ],
+  "landed": [
+    "P06",
+    "P17",
+    "P18",
+    "P10",
+    "P14",
+    "P02",
+    "P19",
+    "P08",
+    "P03",
+    "P15",
+    "P01",
+    "P12",
+    "P16",
+    "P09",
+    "P11",
+    "P04",
+    "P13"
+  ],
+  "landed_items": [
+    "C1",
+    "C2",
+    "C3",
+    "S1",
+    "S3",
+    "L1",
+    "L2"
+  ],
+  "dropped": {
+    "P05": "speculative payoff, extra model call per hold beat, peers 2/10"
+  }
+}
