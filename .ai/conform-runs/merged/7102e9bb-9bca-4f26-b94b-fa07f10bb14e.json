@@ -1,0 +1,66 @@
+{
+ "schema": "conform-run/1",
+ "worker": "7102e9bb-9bca-4f26-b94b-fa07f10bb14e",
+ "subject": "streaming-platform-api-custody",
+ "evaluatedAt": "2026-11-07T23:01:24.061816+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "types-crate",
+   "subject": "streaming-platform-api-custody",
+   "bundle": "media-generation",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-types/src/rpc.rs:621 The disconnect RPC returns the generic ModeratorStatus (state + free-text detail), so the wire contract has no field for 'revocation unconfirmed' or 'purge verified'; the console cannot show the streamer which teardown steps the platform actually confirmed.",
+   "techniques": [
+    {
+     "technique": "brokered-calls-token-never-exposed",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/moderation.rs:221 TwitchConnect carries only verification_uri, user_code and expires_s, and PlatformStatus only bot_login/channel/detail. No contract type or RPC result carries an access or refresh token. Caveat: ModDecision reports outcomes as executed: bool plus error: Option<String> (moderation.rs:95/101), not as typed done/refused/rate-limited/unknown classes."
+    },
+    {
+     "technique": "revoke-then-purge-then-stop",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-types/src/rpc.rs:621 The disconnect result has no typed revoked/unconfirmed/purged/stopped report, so an unconfirmed revocation can never reach the caller as a state."
+    },
+    {
+     "technique": "event-stream-gaps-not-guesses",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-types/src/moderation.rs:119 The moderation log has only Decision and Unban variants. Neither it, PlatformStatus nor StreamEvent has a gap entry with both edges, so a period of dropped platform events cannot be recorded as 'unseen'."
+    },
+    {
+     "technique": "fail-fast-rate-limit-buckets",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/moderation.rs:101 This crate does no rate limiting; the broker (daemon helix.rs) fails fast on a 429. The reset moment reaches the contract only as free text in error, never as a typed rate-limited-until value, so the console cannot show a countdown."
+    },
+    {
+     "technique": "single-flight-jittered-refresh",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-types/src/moderation.rs:222 Refresh and device-code polling live in the daemon broker. The contract only carries the device code's expiry, which lets the UI stop at the deadline."
+    }
+   ],
+   "registryProposal": "For a shared wire-contract crate, the standard could state what the contract must carry: a typed broker outcome class (done / refused / rate_limited_until / unauthorised / unknown), a gap event with both edges, and a typed disconnect report. Without that, a conformant broker's honesty is lost at the RPC boundary."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-07T23:01:24.061816+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "streaming-platform-api-custody"
+   ],
+   "techniques": [
+    "brokered-calls-token-never-exposed",
+    "event-stream-gaps-not-guesses",
+    "fail-fast-rate-limit-buckets",
+    "revoke-then-purge-then-stop",
+    "single-flight-jittered-refresh"
+   ],
+   "deviations": 1,
+   "context": "types-crate",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

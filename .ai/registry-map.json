@@ -2342,7 +2342,11 @@
           "revision": 27,
           "changedAt": "2026-10-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/source.test.tsx:18 The test named 'is the newest by updated_ms' puts the newest tournament first in the fixture, so a regression to 'take the first row' (or the controlled select falling back to its first option) still yields a-new and stays green; the newest-by-updated_ms decision in NoReport.tsx:20 is never what produces the asserted value, and the tie rule its comment describes is never exercised.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:a3c517733d58374b",
+          "evaluatedRevision": 29
         },
         {
           "subject": "agent-memory",
@@ -3119,7 +3123,11 @@
           "revision": 6,
           "changedAt": "2026-10-27",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/console/src/ui/Chip.tsx:28 The one status-to-tone table is keyed by a bare string, not a wire union. A new or misspelled member is never a compile error, so it gets the calm \"neutral\" tone even though the same table holds verdict members (pass/fail/held) whose unknown fallback should be the least-approved one. The State chip also prints the raw token, with underscores swapped for spaces, as its label.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:6a9ab99285e2cac0",
+          "evaluatedRevision": 6
         },
         {
           "subject": "chat-transcript",
@@ -3282,7 +3290,11 @@
           "revision": 11,
           "changedAt": "2026-09-23",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "not-applicable",
+          "evidence": "packages/contract/schema/contract.schema.json:11449 This package is the daemon↔console/stage wire-format schema (RPC methods, event frames), not a contract the repository carries about itself, so the subject's precondition does not hold; grep over packages/contract found no `capabilities`/`capability`, `manifest_version`, `contract_version` or `schemaVersion`, and the only `manifest` hits are the unrelated `CharacterManifest` def and a render-file kind string.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:ae86d5eb87b1c37f",
+          "evaluatedRevision": 11
         },
         {
           "subject": "codegen",
@@ -4090,7 +4102,11 @@
           "revision": 6,
           "changedAt": "2026-09-25",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-segments/data/research-allowlist.toml:10 The research pipeline's network-egress allowlist is a committed manifest, but its own header lets an operator replace it from the uncommitted local shadowrunr.toml, and ResearchAllowlist::from_domains accepts any list with no check that it is a subset of the built-in one, so egress can widen without a reviewed diff — even though line 9 says adding a domain is strictly owner-gated.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:f5666db1094acd9f",
+          "evaluatedRevision": 6
         },
         {
           "subject": "test-harness",
@@ -5014,7 +5030,11 @@
           "revision": 3,
           "changedAt": "2026-11-03",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:621 The disconnect RPC returns the generic ModeratorStatus (state + free-text detail), so the wire contract has no field for 'revocation unconfirmed' or 'purge verified'; the console cannot show the streamer which teardown steps the platform actually confirmed.",
+          "evaluatedAt": "2026-11-07",
+          "evaluatedAgainst": "sha256-b2:8150cc8638d8623e",
+          "evaluatedRevision": 3
         },
         {
           "subject": "ipc-contract",

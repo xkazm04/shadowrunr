@@ -1,0 +1,65 @@
+{
+ "schema": "conform-run/1",
+ "worker": "1d2174b8-cb77-4c32-90c0-5fba338298de",
+ "subject": "status-vocabulary",
+ "evaluatedAt": "2026-11-07T22:36:16.984492+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-ui-primitives",
+   "subject": "status-vocabulary",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/ui/Chip.tsx:28 The one status-to-tone table is keyed by a bare string, not a wire union. A new or misspelled member is never a compile error, so it gets the calm \"neutral\" tone even though the same table holds verdict members (pass/fail/held) whose unknown fallback should be the least-approved one. The State chip also prints the raw token, with underscores swapped for spaces, as its label.",
+   "techniques": [
+    {
+     "technique": "status-color-mapping",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/ui/Chip.tsx:42 Table is keyed by string (line 28), so a new member gets no type check. The unknown fallback is the calm neutral tone for a table that mixes verdict and health members, with no reason written beside it. The role\u2192value link itself is fine: Chip.module.css uses only --sr-color-verdict-* tokens."
+    },
+    {
+     "technique": "vocabulary-chain-integrity",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/ui/Chip.tsx:47 When no label is passed, the machine token is shown raw (underscores turned into spaces). There is no label catalog keyed by token. ui.test.tsx:131 asserts this raw render (\"not provoked\"), which the standard says never to specify."
+    },
+    {
+     "technique": "number-formatting",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/ui/FilterTable.tsx:55 There is no single numeric primitive. FilterTable has a private int helper, PillGroup.tsx:28 inlines its own toLocaleString(\"en-US\"), and RateBar has a private pct. Each call site pins the locale, and about 30 such call sites exist across the console. The console has no i18n today, which softens the locale impact but not the one-renderer rule. RateBar does handle the absent case as \"n/a\" inside its branch, which is correct."
+    },
+    {
+     "technique": "untrusted-label-rendering",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/ui/Markdown.tsx:1 A narrow grammar door: code, strong, emphasis, headings and lists only. There are no link, image or raw-markup paths. ui.test.tsx:150 pins that <script> comes back as literal text. Chips and cells render children as text nodes."
+    },
+    {
+     "technique": "claim-rests-on-its-source",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/ui/RateBar.tsx:14 The rate's tooltip states its basis (the sample n and the interval). FilterTable.tsx:28 documents its facet counts as derived from held rows versus given verbatim."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-07T22:36:16.984492+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "status-vocabulary"
+   ],
+   "techniques": [
+    "claim-rests-on-its-source",
+    "number-formatting",
+    "status-color-mapping",
+    "untrusted-label-rendering",
+    "vocabulary-chain-integrity"
+   ],
+   "deviations": 1,
+   "context": "console-ui-primitives",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

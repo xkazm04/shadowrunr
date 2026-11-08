@@ -8668,6 +8668,230 @@
           "evidence": "apps/console/src/app/compose.ts:10 No seal or pluggable key-unwrapping provider. The client's only dependencies are a socket and timers."
         }
       ]
+    },
+    "4bb2403d-b1bd-42dd-a4c4-5e28811cb7c0/repo-manifest-standard": {
+      "context": "contract-package",
+      "subject": "repo-manifest-standard",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-07",
+      "evaluatedTs": "2026-11-07T22:05:53.800Z",
+      "worker": "f3d6508a-013c-4b2c-bab7-2f04f16c01b4",
+      "techniques": [
+        {
+          "technique": "capability-not-tool-vocabulary",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/src/index.ts:1 The package declares no capability→command map. Its fields are RPC methods and payload shapes, not repository capabilities."
+        },
+        {
+          "technique": "generated-from-provenance",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/scripts/check.mjs:33 Not a manifest. The same discipline does exist here: the check re-exports the schema, regenerates it into a temp directory and compares it with the committed bytes, and every generated file carries a provenance banner (codegen.mjs:24)."
+        },
+        {
+          "technique": "must-ignore-unknown",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/schema/contract.schema.json:11448 The schema's root object and 102 of its object defs are closed. That would be a deviation for a manifest read by many tools, but this is a wire schema validated at one in-repo door (door.ts), which is the single-reader case the subject itself carves out."
+        },
+        {
+          "technique": "spec-ships-with-artifact",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/scripts/check.mjs:43 The schema is committed in the repo and a drift gate fails when it diverges from its Rust source. That is the same idea, but it is not a manifest specification."
+        },
+        {
+          "technique": "semver-additive-evolution",
+          "verdict": "not-applicable",
+          "evidence": "packages/contract/schema/contract.schema.json:11446 The contract's identity is a name rather than a URL, but there is no contract-version field. Console, stage and generated code are regenerated together in one commit, which the technique's 'when not to use' clause covers."
+        }
+      ],
+      "registryProposal": "The registry map paired this wire-format schema package with repo-manifest-standard, probably because it matched on tokens like 'contract', 'generated' and 'check'. Some techniques here (generated-from-provenance's drift check, must-ignore-unknown versus version-gate-precedes-schema-gate, and semver identity+version) also govern daemon wire contracts. That points to a gap in the map or the corpus: a wire/API-contract subject should govern this context instead. Measured against such a subject, the missing contract-version field next to `$id` would be the first thing to judge."
+    },
+    "435472ca-7ef4-4956-80d8-3dc82f215665/status-vocabulary": {
+      "context": "console-ui-primitives",
+      "subject": "status-vocabulary",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-07",
+      "evaluatedTs": "2026-11-07T22:36:16.984Z",
+      "worker": "1d2174b8-cb77-4c32-90c0-5fba338298de",
+      "techniques": [
+        {
+          "technique": "status-color-mapping",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/ui/Chip.tsx:42 Table is keyed by string (line 28), so a new member gets no type check. The unknown fallback is the calm neutral tone for a table that mixes verdict and health members, with no reason written beside it. The role→value link itself is fine: Chip.module.css uses only --sr-color-verdict-* tokens."
+        },
+        {
+          "technique": "vocabulary-chain-integrity",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/ui/Chip.tsx:47 When no label is passed, the machine token is shown raw (underscores turned into spaces). There is no label catalog keyed by token. ui.test.tsx:131 asserts this raw render (\"not provoked\"), which the standard says never to specify."
+        },
+        {
+          "technique": "number-formatting",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/ui/FilterTable.tsx:55 There is no single numeric primitive. FilterTable has a private int helper, PillGroup.tsx:28 inlines its own toLocaleString(\"en-US\"), and RateBar has a private pct. Each call site pins the locale, and about 30 such call sites exist across the console. The console has no i18n today, which softens the locale impact but not the one-renderer rule. RateBar does handle the absent case as \"n/a\" inside its branch, which is correct."
+        },
+        {
+          "technique": "untrusted-label-rendering",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/ui/Markdown.tsx:1 A narrow grammar door: code, strong, emphasis, headings and lists only. There are no link, image or raw-markup paths. ui.test.tsx:150 pins that <script> comes back as literal text. Chips and cells render children as text nodes."
+        },
+        {
+          "technique": "claim-rests-on-its-source",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/ui/RateBar.tsx:14 The rate's tooltip states its basis (the sample n and the interval). FilterTable.tsx:28 documents its facet counts as derived from held rows versus given verbatim."
+        }
+      ]
+    },
+    "3b37a94d-3e69-4c44-8598-301f66448d9a/streaming-platform-api-custody": {
+      "context": "types-crate",
+      "subject": "streaming-platform-api-custody",
+      "bundle": "media-generation",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-07",
+      "evaluatedTs": "2026-11-07T23:01:24.061Z",
+      "worker": "7102e9bb-9bca-4f26-b94b-fa07f10bb14e",
+      "techniques": [
+        {
+          "technique": "brokered-calls-token-never-exposed",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-types/src/moderation.rs:221 TwitchConnect carries only verification_uri, user_code and expires_s, and PlatformStatus only bot_login/channel/detail. No contract type or RPC result carries an access or refresh token. Caveat: ModDecision reports outcomes as executed: bool plus error: Option<String> (moderation.rs:95/101), not as typed done/refused/rate-limited/unknown classes."
+        },
+        {
+          "technique": "revoke-then-purge-then-stop",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:621 The disconnect result has no typed revoked/unconfirmed/purged/stopped report, so an unconfirmed revocation can never reach the caller as a state."
+        },
+        {
+          "technique": "event-stream-gaps-not-guesses",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-types/src/moderation.rs:119 The moderation log has only Decision and Unban variants. Neither it, PlatformStatus nor StreamEvent has a gap entry with both edges, so a period of dropped platform events cannot be recorded as 'unseen'."
+        },
+        {
+          "technique": "fail-fast-rate-limit-buckets",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/moderation.rs:101 This crate does no rate limiting; the broker (daemon helix.rs) fails fast on a 429. The reset moment reaches the contract only as free text in error, never as a typed rate-limited-until value, so the console cannot show a countdown."
+        },
+        {
+          "technique": "single-flight-jittered-refresh",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-types/src/moderation.rs:222 Refresh and device-code polling live in the daemon broker. The contract only carries the device code's expiry, which lets the UI stop at the deadline."
+        }
+      ],
+      "registryProposal": "For a shared wire-contract crate, the standard could state what the contract must carry: a typed broker outcome class (done / refused / rate_limited_until / unauthorised / unknown), a gap event with both edges, and a typed disconnect report. Without that, a conformant broker's honesty is lost at the RPC boundary."
+    },
+    "5ca16ac4-6263-4c09-80d5-f32a969b16b6/supply-chain": {
+      "context": "segments-runtime",
+      "subject": "supply-chain",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-07",
+      "evaluatedTs": "2026-11-07T23:21:48.873Z",
+      "worker": "c17d7834-fc3a-4c61-ab7e-0aac6a5833ea",
+      "techniques": [
+        {
+          "technique": "permission-manifest-scoping",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-segments/data/research-allowlist.toml:10 Deny-by-default holds (https-only, empty list refused), but 'replace' lets operator-local config widen egress. The standard says privilege grows only through a committed, reviewed manifest edit. Only shadowrunr.example.toml is tracked."
+        },
+        {
+          "technique": "unsafe-deserialization-off-by-default",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-segments/src/cases.rs:291 Staged case files written by the research pipeline cross a process boundary. They load through typed serde into plain data structs, with no object-graph or code-constructing loader and no permissive flag."
+        },
+        {
+          "technique": "archive-extraction-safety",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/src/cases.rs:90 Here 'extraction' means extracting text from fetched HTML or plain text. The crate has no zip/tar/gzip unpacking; the 'zip' hits in the grep are only iterator .zip()."
+        },
+        {
+          "technique": "vendored-fork-ledger",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:13 Every third-party dependency resolves from the registry. The workspace has no vendored copy, no [patch], and no git source."
+        },
+        {
+          "technique": "patching-mechanism-ladder",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-segments/Cargo.toml:14 No dependency is modified by any mechanism (fork, mirror, runtime hook or build rewrite). sha2 is used unmodified for content hashing."
+        }
+      ],
+      "registryProposal": "permission-manifest-scoping is written around platform capability manifests (windows, webviews, extensions). Application-level network-egress allowlists that live in data files and can be overridden by operator config are a common variant the technique does not name. It should state whether an operator override may only narrow the committed list (subset check) or may replace it, because 'narrow or replace' wording turns the committed manifest into a default rather than a bound."
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/test-harness": {
+      "context": "console-reconcile-page",
+      "subject": "test-harness",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-07",
+      "evaluatedTs": "2026-11-07T23:43:06.499Z",
+      "worker": "cc1492a3-5a76-414a-befd-0a0f7d092929",
+      "techniques": [
+        {
+          "technique": "unreached-decisions-pin-nothing",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/source.test.tsx:18 The fixture orders rows so 'first row' and 'newest' give the same answer. Only the 'last in name order' defect is distinguished. To fix, put the newest row in the middle or at the end with a smaller id."
+        },
+        {
+          "technique": "isolation-lanes",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/layer2.test.tsx:9 The module-level session singleton is reset before each test, and window.matchMedia is restored in a finally block (layer1.test.tsx:75), so no test inherits state from another."
+        },
+        {
+          "technique": "assert-the-schedule-not-the-stopwatch",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/inflight.test.tsx:27 The in-flight claim is proved by holding the reply open (a barrier) and counting reconcile.run calls. It never uses elapsed time; settle() yields to the event loop and the data layer runs on manualTimers."
+        },
+        {
+          "technique": "fixture-economics",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/testgen.ts:4 Cheap, parameterised generators (scale up to 10x) are typed against the generated contract. Replies also pass the real contractDoor through mountPage, so a fixture with a stale shape fails instead of passing."
+        },
+        {
+          "technique": "recorded-interaction-fixtures",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/testgen.ts:65 The counterpart is the repo's own daemon, not a remote service. Even so, wireReport is a hand-written TS copy of report_wire.rs's cut and sort behaviour, and nothing checks it against the daemon's real output. Only its shape is checked."
+        },
+        {
+          "technique": "approval-snapshots-with-guarded-update",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/model.test.ts:8 There are no snapshot or record modes. Outputs are small derived values asserted directly, not large structures that would call for approval files."
+        },
+        {
+          "technique": "assert-through-the-reader",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/layer2.test.tsx:158 The only emitted 'text' is RPC JSON produced by the data layer's serializer; no shell, config or paste artifacts. The substring match over JSON is still a near-side check: it would not catch the key landing at the wrong nesting level."
+        }
+      ]
+    },
+    "2d5c0390-3d7b-4c7d-8b4f-cc0741b2cd30/verifiable-giveaway-draws": {
+      "context": "console-simulator-page",
+      "subject": "verifiable-giveaway-draws",
+      "bundle": "media-generation",
+      "state": "unknown",
+      "evaluatedAt": "2026-11-08",
+      "evaluatedTs": "2026-11-08T00:16:51.679Z",
+      "techniques": [
+        {
+          "technique": "freeze-and-announce-before-randomness",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/draw.ts:1 This file renders a canvas scene. There is no entry list to freeze and no on-air draw."
+        },
+        {
+          "technique": "public-beacon-round-after-margin",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/SimScreen.tsx:3 \"Tournaments\" here are simulation runs shown as tiles. Nothing consumes public randomness."
+        },
+        {
+          "technique": "unbiased-weighted-sampling",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/simulator/Tournaments.tsx:1 Nothing selects winners from weighted entries. The page lists tournaments and runs, worst first."
+        }
+      ],
+      "withdrawn": {
+        "worker": "c1accbe0-0c61-436e-8c42-5382e40fc81a",
+        "state": "not-applicable",
+        "at": "2026-11-08T00:17:53.202224+00:00",
+        "reason": "reviewer (sonnet): The anchor (draw.ts:1) is only a comment about canvas drawing. It doesn't show that a giveaway-draw precondition is absent, so it's an incidental anchor for the not-applicable."
+      }
     }
   }
 }
