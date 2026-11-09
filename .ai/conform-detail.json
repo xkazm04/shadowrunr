@@ -6643,16 +6643,27 @@
       "context": "console-shell-router",
       "subject": "live-system-demo-film",
       "bundle": "media-generation",
-      "state": "unknown",
-      "evaluatedAt": "2026-11-03",
-      "evaluatedTs": "2026-11-03T17:10:15.030Z",
-      "techniques": [],
-      "withdrawn": {
-        "worker": "4ce04cf2-acc4-4dd8-96a9-e26a0ff56664",
-        "state": "not-applicable",
-        "at": "2026-11-03T17:10:34.591748+00:00",
-        "reason": "reviewer (sonnet): The anchor route.ts:7 is a comment about the hash URL contract. It says nothing about film or narration being absent. The claim that Intro is only an in-app poster animation rests on Intro.tsx, which the anchor does not cite, and I did not confirm it."
-      }
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T01:37:36.536Z",
+      "worker": "8e7d017f-8e8a-4c02-a0c7-d82260942073",
+      "techniques": [
+        {
+          "technique": "recorder-owned-overlay",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Intro.tsx:6 This overlay is the product's own skippable boot intro, not explanatory chrome injected by a recorder; no recorder exists in this context."
+        },
+        {
+          "technique": "native-window-grab-with-measured-clock",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/package.json:17 The console has a native Tauri shell, which is the technique's setting, but gdigrab and ffmpeg have 0 hits in apps/console, so no screen grab is made from this context."
+        },
+        {
+          "technique": "recording-that-asserts-its-claims",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/shell/Chrome.tsx:25 The only driving in the shell is an operator-facing agent toggle; nothing captures a take, so there are no film claims to assert."
+        }
+      ]
     },
     "b2009d98-3f59-4c44-97e1-b3b93b65264c/video-assembly": {
       "context": "stage-voice-client",
@@ -9238,6 +9249,37 @@
           "technique": "voice-ux-integration",
           "verdict": "not-applicable",
           "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:43 Playback is the browser's native video controls on a clip the operator opened; there is no read-aloud or narration."
+        }
+      ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/live-system-demo-film": {
+      "context": "console-onair-page",
+      "subject": "live-system-demo-film",
+      "bundle": "media-generation",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T01:37:36.536Z",
+      "worker": "8e7d017f-8e8a-4c02-a0c7-d82260942073",
+      "techniques": [
+        {
+          "technique": "audio-first-beat-pacing",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:3 Voice timing here seeks a player over an already rendered stream cut; no picture is captured or held against measured narration."
+        },
+        {
+          "technique": "summary-rendered-from-the-run",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/beats.ts:2 These counts feed operator tables about a show run; there is no film recap or end plate, and 'beat' means a transcript event rather than a scripted film beat."
+        },
+        {
+          "technique": "seeded-stage-with-a-declared-boundary",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/Screen.tsx:120 This labels a fictional case in the show's preview; it resembles a declared boundary but no demo film runs against it."
+        },
+        {
+          "technique": "retake-without-an-edit-session",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/clipModel.ts:7 This is the publish funnel for stream clips; it has no narration synthesis, spend guard, dry mode or assembly from logged offsets."
         }
       ]
     }

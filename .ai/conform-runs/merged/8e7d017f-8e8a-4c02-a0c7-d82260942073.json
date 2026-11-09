@@ -1,0 +1,113 @@
+{
+ "schema": "conform-run/1",
+ "worker": "8e7d017f-8e8a-4c02-a0c7-d82260942073",
+ "subject": "live-system-demo-film",
+ "evaluatedAt": "2026-11-09T01:37:36.536208+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-shell-router",
+   "subject": "live-system-demo-film",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/package.json:11 The console's scripts are build, lint, vitest, fidelity, perf and tauri with no capture or film command, and searches for recordVideo, screencast, gdigrab, ffmpeg and narration found 0 hits across apps/console, so this shell and router produce no demo film for the subject to govern.",
+   "techniques": [
+    {
+     "technique": "recorder-owned-overlay",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/Intro.tsx:6 This overlay is the product's own skippable boot intro, not explanatory chrome injected by a recorder; no recorder exists in this context."
+    },
+    {
+     "technique": "native-window-grab-with-measured-clock",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/package.json:17 The console has a native Tauri shell, which is the technique's setting, but gdigrab and ffmpeg have 0 hits in apps/console, so no screen grab is made from this context."
+    },
+    {
+     "technique": "recording-that-asserts-its-claims",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/shell/Chrome.tsx:25 The only driving in the shell is an operator-facing agent toggle; nothing captures a take, so there are no film claims to assert."
+    }
+   ],
+   "absenceTerms": [
+    "recordVideo",
+    "screencast",
+    "gdigrab",
+    "ffmpeg",
+    "narration"
+   ]
+  },
+  {
+   "context": "console-onair-page",
+   "subject": "live-system-demo-film",
+   "bundle": "media-generation",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/onair/clipModel.ts:35 Clips on this page are cuts of the live show timed on the stream clock and reviewed through an owner gate, not driven captures of a software system, and searches for recordVideo, screencast, gdigrab, ffmpeg and narration found 0 hits across apps/console, so the demo-film craft has no object here.",
+   "techniques": [
+    {
+     "technique": "audio-first-beat-pacing",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:3 Voice timing here seeks a player over an already rendered stream cut; no picture is captured or held against measured narration."
+    },
+    {
+     "technique": "summary-rendered-from-the-run",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/beats.ts:2 These counts feed operator tables about a show run; there is no film recap or end plate, and 'beat' means a transcript event rather than a scripted film beat."
+    },
+    {
+     "technique": "seeded-stage-with-a-declared-boundary",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/Screen.tsx:120 This labels a fictional case in the show's preview; it resembles a declared boundary but no demo film runs against it."
+    },
+    {
+     "technique": "retake-without-an-edit-session",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/onair/clipModel.ts:7 This is the publish funnel for stream clips; it has no narration synthesis, spend guard, dry mode or assembly from logged offsets."
+    }
+   ],
+   "absenceTerms": [
+    "recordVideo",
+    "screencast",
+    "gdigrab",
+    "ffmpeg",
+    "narration"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-09T01:37:36.536208+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-system-demo-film"
+   ],
+   "techniques": [
+    "native-window-grab-with-measured-clock",
+    "recorder-owned-overlay",
+    "recording-that-asserts-its-claims"
+   ],
+   "deviations": 0,
+   "context": "console-shell-router",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-09T01:37:36.536208+00:00",
+   "bundle": "media-generation",
+   "subjects": [
+    "live-system-demo-film"
+   ],
+   "techniques": [
+    "audio-first-beat-pacing",
+    "retake-without-an-edit-session",
+    "seeded-stage-with-a-declared-boundary",
+    "summary-rendered-from-the-run"
+   ],
+   "deviations": 0,
+   "context": "console-onair-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

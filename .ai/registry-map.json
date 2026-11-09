@@ -1976,8 +1976,12 @@
           "revision": 3,
           "changedAt": "2026-10-29",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "not-applicable",
+          "priorNotApplicable": 4,
+          "evidence": "apps/console/src/pages/onair/clipModel.ts:35 Clips on this page are cuts of the live show timed on the stream clock and reviewed through an owner gate, not driven captures of a software system, and searches for recordVideo, screencast, gdigrab, ffmpeg and narration found 0 hits across apps/console, so the demo-film craft has no object here.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:e3bb8c209c3765f1",
+          "evaluatedRevision": 3
         },
         {
           "subject": "data-video-art-direction",
@@ -2683,8 +2687,12 @@
           "revision": 3,
           "changedAt": "2026-10-29",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "not-applicable",
+          "priorNotApplicable": 4,
+          "evidence": "apps/console/package.json:11 The console's scripts are build, lint, vitest, fidelity, perf and tauri with no capture or film command, and searches for recordVideo, screencast, gdigrab, ffmpeg and narration found 0 hits across apps/console, so this shell and router produce no demo film for the subject to govern.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:e3bb8c209c3765f1",
+          "evaluatedRevision": 3
         },
         {
           "subject": "mcp-tools",
