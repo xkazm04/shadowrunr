@@ -9172,22 +9172,32 @@
       "context": "stage-kit-overlays",
       "subject": "quality-gates",
       "bundle": "software-engineering",
-      "state": "unknown",
+      "state": "deviation",
       "evaluatedAt": "2026-11-09",
-      "evaluatedTs": "2026-11-09T00:43:42.274Z",
+      "evaluatedTs": "2026-11-09T03:41:56.412Z",
+      "worker": "8482f00e-4181-4843-b792-9f71ca138e55",
       "techniques": [
         {
+          "technique": "prose-rule-drift",
+          "verdict": "deviation",
+          "evidence": "packages/stage-kit/src/ui/Overlays.tsx:6 Audit answer for the stacking half is 'nothing fails'; it holds today only because styles.css gives .disclosure 100 against wipe 50, intro 60, outro 70, slate 80, stalled 90. Same gap, by search and not mutation: no assertion covers the on-air branches at Overlays.tsx:92 (tone) or Browser.tsx:84 (staged-copy note), though onair.test.ts states 'no production detail on air' and covers five other surfaces."
+        },
+        {
           "technique": "waiver-names-its-finding",
+          "verdict": "conformant",
+          "evidence": "packages/stage-kit/src/ui/Hexmap.tsx:117 Both waivers in the context name rule and site. Fault-injected via stdin: a typo in the rule name exits 1 with 'Definition for rule not found' and the finding still reported; a waiver naming one of two findings leaves the other blocking. The repo-wide grammar hole is in notes, not charged to this context."
+        },
+        {
+          "technique": "false-positive-economics",
+          "verdict": "conformant",
+          "evidence": "packages/stage-kit/src/ui/Hexmap.tsx:116 A correct pattern the detector cannot see is handled by a visible inline acknowledgment with its reason, and in the assertion form: a stale copy of the directive exits 1 under --max-warnings 0. The justification is present by habit; the gate does not require it."
+        },
+        {
+          "technique": "policy-projection",
           "verdict": "not-applicable",
-          "evidence": "packages/stage-kit/src/ui/Hexmap.tsx:117 Disclosed so the absence claim is not read as hiding it: the context uses a waiver and does not define the grammar. This directive names its rule, reaches one line, and carries a reason on line 116, so it would not be a deviation if the technique applied."
+          "evidence": "packages/stage-kit/src/ui/ChatLane.tsx:44 The only policy these overlays project is a live poll's ballot rule, a product feature; no quality-gate policy, pass rate or copyable gate config is rendered here."
         }
-      ],
-      "withdrawn": {
-        "worker": "295bb3ee-b605-4360-9004-f19e0f4d0db1",
-        "state": "not-applicable",
-        "at": "2026-11-09T00:44:06.857257+00:00",
-        "reason": "reviewer (sonnet): The not-applicable anchor, packages/stage-kit/package.json:15, is the package's own gate (`eslint src --max-warnings 0`), so it doesn't show a missing precondition. The 'absence' claim was searched only in src/ui, and the context's own Hexmap.tsx:117 and :122 use eslint-disable waivers, so the gate "
-      }
+      ]
     },
     "3048d794-6232-48f9-ab59-cfe44cb0d0d2/agent-memory": {
       "context": "sim-runner-judging",

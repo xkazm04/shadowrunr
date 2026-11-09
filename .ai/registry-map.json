@@ -4687,7 +4687,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "packages/stage-kit/src/ui/Overlays.tsx:6 The badge's presence is checked by a real Stage render (apps/stage/src/slates.test.ts:91), but its 'above everything' clause has no mechanism: a search of apps/stage and packages/stage-kit tests and .mjs scripts for z-index, zIndex, elementFromPoint and 'above every' found nothing, so a new broadcast layer stacked over z-index 100 would cover the AI disclosure with every check green.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:a5b34d39a4b8edd3",
+          "evaluatedRevision": 56
         }
       ],
       "governance": "governed"

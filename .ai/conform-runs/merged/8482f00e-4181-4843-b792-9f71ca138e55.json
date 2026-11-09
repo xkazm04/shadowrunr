@@ -1,0 +1,59 @@
+{
+ "schema": "conform-run/1",
+ "worker": "8482f00e-4181-4843-b792-9f71ca138e55",
+ "subject": "quality-gates",
+ "evaluatedAt": "2026-11-09T03:41:56.412403+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "stage-kit-overlays",
+   "subject": "quality-gates",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "packages/stage-kit/src/ui/Overlays.tsx:6 The badge's presence is checked by a real Stage render (apps/stage/src/slates.test.ts:91), but its 'above everything' clause has no mechanism: a search of apps/stage and packages/stage-kit tests and .mjs scripts for z-index, zIndex, elementFromPoint and 'above every' found nothing, so a new broadcast layer stacked over z-index 100 would cover the AI disclosure with every check green.",
+   "techniques": [
+    {
+     "technique": "prose-rule-drift",
+     "verdict": "deviation",
+     "evidence": "packages/stage-kit/src/ui/Overlays.tsx:6 Audit answer for the stacking half is 'nothing fails'; it holds today only because styles.css gives .disclosure 100 against wipe 50, intro 60, outro 70, slate 80, stalled 90. Same gap, by search and not mutation: no assertion covers the on-air branches at Overlays.tsx:92 (tone) or Browser.tsx:84 (staged-copy note), though onair.test.ts states 'no production detail on air' and covers five other surfaces."
+    },
+    {
+     "technique": "waiver-names-its-finding",
+     "verdict": "conformant",
+     "evidence": "packages/stage-kit/src/ui/Hexmap.tsx:117 Both waivers in the context name rule and site. Fault-injected via stdin: a typo in the rule name exits 1 with 'Definition for rule not found' and the finding still reported; a waiver naming one of two findings leaves the other blocking. The repo-wide grammar hole is in notes, not charged to this context."
+    },
+    {
+     "technique": "false-positive-economics",
+     "verdict": "conformant",
+     "evidence": "packages/stage-kit/src/ui/Hexmap.tsx:116 A correct pattern the detector cannot see is handled by a visible inline acknowledgment with its reason, and in the assertion form: a stale copy of the directive exits 1 under --max-warnings 0. The justification is present by habit; the gate does not require it."
+    },
+    {
+     "technique": "policy-projection",
+     "verdict": "not-applicable",
+     "evidence": "packages/stage-kit/src/ui/ChatLane.tsx:44 The only policy these overlays project is a live poll's ballot rule, a product feature; no quality-gate policy, pass rate or copyable gate config is rendered here."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-09T03:41:56.412403+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "quality-gates"
+   ],
+   "techniques": [
+    "false-positive-economics",
+    "policy-projection",
+    "prose-rule-drift",
+    "waiver-names-its-finding"
+   ],
+   "deviations": 1,
+   "context": "stage-kit-overlays",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
