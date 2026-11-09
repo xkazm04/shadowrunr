@@ -386,6 +386,79 @@ mod tests {
         }
     }
 
+    fn arc_state(id: &str, options: &[&str]) -> ArcStateDef {
+        ArcStateDef {
+            id: id.into(),
+            summary: "s".into(),
+            payoff: None,
+            vote: (!options.is_empty()).then(|| ArcVote {
+                question: "?".into(),
+                options: options.iter().map(|o| (*o).to_string()).collect(),
+            }),
+        }
+    }
+
+    fn arc_transition(id: &str, from: &str, option: &str, to: &str) -> ArcTransition {
+        ArcTransition {
+            id: id.into(),
+            from: from.into(),
+            option: option.into(),
+            to: to.into(),
+            announce: "a".into(),
+        }
+    }
+
+    fn arc() -> ArcDef {
+        ArcDef {
+            id: "arc".into(),
+            title: "t".into(),
+            status: ArcStatus::Approved,
+            recap: "r".into(),
+            start: "a".into(),
+            states: vec![arc_state("a", &["yes", "no"]), arc_state("b", &[])],
+            transitions: vec![arc_transition("t1", "a", "yes", "b")],
+        }
+    }
+
+    #[test]
+    fn a_well_formed_arc_validates_and_each_flaw_names_itself() {
+        assert_eq!(arc().validate(), Ok(()));
+
+        let mut a = arc();
+        a.states.clear();
+        assert!(a.validate().unwrap_err().contains("states"));
+
+        let mut a = arc();
+        a.transitions = (0..=ARC_MAX_TRANSITIONS)
+            .map(|i| arc_transition(&format!("t{i}"), "a", "yes", "b"))
+            .collect();
+        assert!(a.validate().unwrap_err().contains("transitions"));
+
+        let mut a = arc();
+        a.start = "zz".into();
+        assert!(a.validate().unwrap_err().contains("start state"));
+
+        let mut a = arc();
+        a.states.push(arc_state("a", &[]));
+        assert!(a.validate().unwrap_err().contains("defined twice"));
+
+        let mut a = arc();
+        a.transitions.push(arc_transition("t1", "a", "no", "b"));
+        assert!(a.validate().unwrap_err().contains("defined twice"));
+
+        let mut a = arc();
+        a.transitions = vec![arc_transition("t1", "zz", "yes", "b")];
+        assert!(a.validate().unwrap_err().contains("no state"));
+
+        let mut a = arc();
+        a.transitions = vec![arc_transition("t1", "a", "yes", "zz")];
+        assert!(a.validate().unwrap_err().contains("no state"));
+
+        let mut a = arc();
+        a.transitions = vec![arc_transition("t1", "a", "maybe", "b")];
+        assert!(a.validate().unwrap_err().contains("not an option"));
+    }
+
     #[test]
     fn wire_names() {
         assert_eq!(

@@ -595,4 +595,68 @@ mod tests {
         );
         assert!(line.contains("fictional=true"), "{line}");
     }
+
+    #[test]
+    fn job_plan_health_recall_and_session_events_render_and_restamp() {
+        let ev = |json: serde_json::Value| -> StreamEvent { serde_json::from_value(json).unwrap() };
+        let cases = [
+            (
+                ev(
+                    serde_json::json!({"type": "job", "ts_ms": 1, "job_id": "r-01", "status": "done", "summary": "two reports"}),
+                ),
+                "job r-01 done: two reports",
+            ),
+            (
+                ev(
+                    serde_json::json!({"type": "job", "ts_ms": 1, "job_id": "r-02", "status": "running"}),
+                ),
+                "job r-02 running",
+            ),
+            (
+                ev(
+                    serde_json::json!({"type": "beat_plan", "ts_ms": 1, "mode": "bit", "bit_id": "bit-1", "picks": 2, "reason": "a bit"}),
+                ),
+                "beat_plan bit bit=bit-1 picks=2: a bit",
+            ),
+            (
+                ev(
+                    serde_json::json!({"type": "beat_plan", "ts_ms": 1, "mode": "react", "picks": 1, "reason": "chat"}),
+                ),
+                "beat_plan react picks=1: chat",
+            ),
+            (
+                ev(
+                    serde_json::json!({"type": "health", "ts_ms": 1, "state": "degraded", "detail": "slow"}),
+                ),
+                "health degraded: slow",
+            ),
+            (
+                ev(serde_json::json!({"type": "health", "ts_ms": 1, "state": "healthy"})),
+                "health healthy",
+            ),
+            (
+                ev(
+                    serde_json::json!({"type": "recall", "ts_ms": 1, "facts": ["f_1"], "habits": ["h_1", "h_2"], "viewers": ["v1"]}),
+                ),
+                "recall 1 facts, 2 habits, 0 episodes, 1 viewers, 0 moments",
+            ),
+            (
+                ev(
+                    serde_json::json!({"type": "session", "ts_ms": 1, "kind": "open_failed", "detail": "no core"}),
+                ),
+                "session open_failed: no core",
+            ),
+            (
+                ev(serde_json::json!({"type": "session", "ts_ms": 1, "kind": "died"})),
+                "session died",
+            ),
+        ];
+        for (mut e, want) in cases {
+            assert_eq!(body(&e), want);
+            assert_eq!(ts(&e), 1);
+            set_ts(&mut e, 90_000);
+            assert_eq!(ts(&e), 90_000);
+            assert!(render_line(3, &e).starts_with("L3 [01:30] "), "{want}");
+        }
+    }
 }

@@ -1296,3 +1296,47 @@ fn session_event_reads_its_timestamp_and_renders_one_line() {
         format!("session died: {}…", "x".repeat(160))
     );
 }
+
+#[test]
+fn job_plan_health_and_recall_events_render_one_line_each() {
+    use shadowrunr_types::StreamEvent;
+
+    let line = |json: serde_json::Value| -> StreamEvent { serde_json::from_value(json).unwrap() };
+
+    let job = line(
+        json!({"type": "job", "ts_ms": 11, "job_id": "r-01", "status": "done", "summary": "two reports"}),
+    );
+    assert_eq!(runs::ts(&job), 11);
+    assert_eq!(runs::body(&job), "job r-01 done: two reports");
+    let bare_job = line(json!({"type": "job", "ts_ms": 12, "job_id": "r-02", "status": "running"}));
+    assert_eq!(runs::body(&bare_job), "job r-02 running");
+
+    let plan = line(
+        json!({"type": "beat_plan", "ts_ms": 13, "mode": "bit", "bit_id": "bit-1", "picks": 2, "reason": "a prepared bit"}),
+    );
+    assert_eq!(runs::ts(&plan), 13);
+    assert_eq!(
+        runs::body(&plan),
+        "beat_plan bit bit=bit-1 picks=2 (a prepared bit)"
+    );
+    let bare_plan = line(
+        json!({"type": "beat_plan", "ts_ms": 14, "mode": "react", "picks": 1, "reason": "chat"}),
+    );
+    assert_eq!(runs::body(&bare_plan), "beat_plan react picks=1 (chat)");
+
+    let health =
+        line(json!({"type": "health", "ts_ms": 15, "state": "degraded", "detail": "slow"}));
+    assert_eq!(runs::ts(&health), 15);
+    assert_eq!(runs::body(&health), "health degraded: slow");
+    let bare_health = line(json!({"type": "health", "ts_ms": 16, "state": "healthy"}));
+    assert_eq!(runs::body(&bare_health), "health healthy");
+
+    let recall = line(
+        json!({"type": "recall", "ts_ms": 17, "facts": ["f_1", "f_2"], "habits": ["h_1"], "viewers": ["v1"]}),
+    );
+    assert_eq!(runs::ts(&recall), 17);
+    assert_eq!(
+        runs::body(&recall),
+        "recall 2 facts, 1 habits, 0 episodes, 1 viewers, 0 moments"
+    );
+}
