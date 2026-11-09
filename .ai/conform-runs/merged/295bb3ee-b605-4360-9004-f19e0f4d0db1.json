@@ -1,0 +1,109 @@
+{
+  "schema": "conform-run/1",
+  "worker": "295bb3ee-b605-4360-9004-f19e0f4d0db1",
+  "subject": "quality-gates",
+  "evaluatedAt": "2026-11-09T00:43:42.274202+00:00",
+  "provider": "claude",
+  "model": "claude-opus-5-5",
+  "pairs": [
+    {
+      "context": "stage-avatar-renderer",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evidence": "apps/stage/src/avatar/layer-frame.test.ts:87 The avatar tree's source guards match needles against raw file text with comments included and no explanation of why, so deleting the real listener from gl-kit.ts while a comment there names `webglcontextlost` stays green; the hazard is latent, since every current needle hit is real code.",
+      "techniques": [
+        {
+          "technique": "match-the-resolved-artifact",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/avatar/layer-frame.test.ts:87 Raw `includes` over text that still holds comments, in both the absence leg and the door's positive control. No normalising to what executes, no seeded describes/calls pair, and no stated reason for the raw read, which the technique treats as indistinguishable from the defect."
+        },
+        {
+          "technique": "renameable-detector-keys",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/avatar/layer-frame.test.ts:96 The key is one spelling of an expression: a second copy of the formula written `open_frac || 0.15` in a renderer passes, while the suite title at line 94 reports the property ('live in one module each'), a floor reporting as a ceiling. Limited to this needle; the two platform tokens at lines 100 and 104 are not freely renameable."
+        },
+        {
+          "technique": "unparseable-form-is-a-finding",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/avatar/layer-frame.test.ts:100 A blocking source-pattern guard over a tree the project owns, with no refusal of the escape forms: a computed member such as gl[\"UNPACK_\" + x] or a computed event name is simply not seen. Not realized, low severity on a three-needle guard."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/layer-frame.test.ts:104 The exact-list assertion makes an empty walk or a moved door red rather than clean. Commit 7b24885 records the cases as '6 red before' the depth renderer dropped its copies, so these guards were seen red at birth."
+        },
+        {
+          "technique": "chokepoint-tag-registry",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/cut/renderer.ts:184 Negative-space half only: renderers reach the context-loss capability through the gl-kit wrapper, and the guard confines the raw event to that module. There is no per-operation table here for the three-way bijection to reconcile."
+        },
+        {
+          "technique": "decidable-in-a-window",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/layer-frame.test.ts:84 A per-file walk with a named-door existence assertion, the narrowed local form of resolution 1. The unstated narrowing is recorded under renameable-detector-keys rather than counted twice."
+        },
+        {
+          "technique": "severity-by-construction",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/renderers.golden.test.ts:214 A hard vitest assertion with no advisory level or threshold; the file matches the stage's `src/**/*.test.ts` include, so a mismatch fails `vitest run`."
+        },
+        {
+          "technique": "vacuous-by-evaluation",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/avatar/renderers.golden.test.ts:244 The golden pins both a call count and a hash of the recorded stream, and no evaluation layer derives the compared value, so an empty or changed stream cannot satisfy it."
+        },
+        {
+          "technique": "oracle-frozen-during-repair",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/avatar/renderers.golden.test.ts:242 This is a behaviour-preserving refactor guard committed green first (bc0de24), not a repair of a failing check. No freeze mechanism was assessed."
+        }
+      ]
+    }
+  ],
+  "declined": [
+    {
+      "subject": "quality-gates",
+      "context": "stage-kit-overlays",
+      "reason": "withdrawn after review: reviewer (sonnet): The not-applicable anchor, packages/stage-kit/package.json:15, is the package's own gate (`eslint src --max-warnings 0`), so it doesn't show a missing precondition. The 'absence' claim was searched only in src/ui, and the context's own Hexmap.tsx:117 and :122 use eslint-disable waivers, so the gate "
+    }
+  ],
+  "consults": [
+    {
+      "ts": "2026-11-09T00:43:42.274202+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "quality-gates"
+      ],
+      "techniques": [
+        "chokepoint-tag-registry",
+        "decidable-in-a-window",
+        "gate-liveness",
+        "match-the-resolved-artifact",
+        "oracle-frozen-during-repair",
+        "renameable-detector-keys",
+        "severity-by-construction",
+        "unparseable-form-is-a-finding",
+        "vacuous-by-evaluation"
+      ],
+      "deviations": 1,
+      "context": "stage-avatar-renderer",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    },
+    {
+      "ts": "2026-11-09T00:43:42.274202+00:00",
+      "bundle": "software-engineering",
+      "subjects": [
+        "quality-gates"
+      ],
+      "techniques": [
+        "waiver-names-its-finding"
+      ],
+      "deviations": 0,
+      "context": "stage-kit-overlays",
+      "via": "curator-multi:claude",
+      "model": "claude-opus-5-5"
+    }
+  ]
+}

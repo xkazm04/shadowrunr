@@ -6320,7 +6320,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/avatar/layer-frame.test.ts:87 The avatar tree's source guards match needles against raw file text with comments included and no explanation of why, so deleting the real listener from gl-kit.ts while a comment there names `webglcontextlost` stays green; the hazard is latent, since every current needle hit is real code.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:a5b34d39a4b8edd3",
+          "evaluatedRevision": 56
         },
         {
           "subject": "data-video-art-direction",
