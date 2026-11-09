@@ -1,0 +1,124 @@
+{
+ "schema": "conform-run/1",
+ "worker": "368ecb2c-14a1-40d3-ac7e-f6e6023d6534",
+ "subject": "mcp-tools",
+ "evaluatedAt": "2026-11-09T00:24:17.554745+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "daemon-core-rpc",
+   "subject": "mcp-tools",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/rpc.rs:203 Every MCP tool and POST /rpc funnel through this door, yet it contains no panic catch, timeout or result-size cap, so limits are left to each handler and a handler panic awaited in the `shadowrunr mcp` stdio loop ends the transport for every tool.",
+   "techniques": [
+    {
+     "technique": "server-composition",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/rpc.rs:203 One door exists, but the door-level obligations do not: searching the daemon's src for catch_unwind/AssertUnwindSafe finds nothing (live.rs only maps a sim task's JoinError), and rpc.rs and server.rs have no timeout. The stdio server awaits dispatch under rt.block_on, so a panic is not returned as a flagged result."
+    },
+    {
+     "technique": "transport-selection",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/cli.rs:111 The tool door is a child process on standard streams, so identity is by parenthood. A search for println!/stdout writers outside the CLI commands found none reachable from dispatch (the sim runner's println! is inside its test module). There is no process-wide stdout defense, but no dependency in the search needed one."
+    },
+    {
+     "technique": "tool-schema-design",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/rpc.rs:92 Judged only for this context's share: arguments are validated at dispatch against the same Rust types the contract schema is generated from, and failures return as invalid_params rather than a dead call. Range placement is judged under types-crate; result size under server-composition."
+    },
+    {
+     "technique": "sealed-continuation-state",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/paging.rs:46 The page cursor is a hex-encoded, versioned carrier parsed defensively, and an unknown version is refused. It is unsigned, which the technique's narrow exemption allows: the decoded key is only compared for position, so tampering cannot reach an authorization or a resource."
+    },
+    {
+     "technique": "enumeration-without-a-scope",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/paging.rs:95 Listings cover one operator's data directory; there are no per-caller resources for a scope to separate."
+    },
+    {
+     "technique": "authentication-and-scoping",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/server.rs:10 The tool-protocol door is stdio, where identity is by parenthood, and /rpc is not itself a tool door. Recorded as a fact rather than a verdict: /rpc checks only Origin, so a local non-browser process reaches the write methods that the MCP write switches gate."
+    }
+   ],
+   "registryProposal": "authentication-and-scoping does not say whether a loopback RPC listener that backs a stdio tool door owes per-caller credentials when its write methods are gated only on the tool-door side; the technique could state that case explicitly."
+  },
+  {
+   "context": "types-crate",
+   "subject": "mcp-tools",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-types/src/rpc.rs:292 The floor of `limit` lives only in this doc comment, so the generated contract publishes `minimum: 0` into the `list_runs` input schema while dispatch refuses 0 with \"limit must be at least 1\", a published contract the server does not honour.",
+   "techniques": [
+    {
+     "technique": "tool-schema-design",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-types/src/rpc.rs:292 contract.schema.json carries \"minimum\":0 for RunsPageParams.limit, while paging::page_limit rejects 0. MCP carries JSON Schema ranges, and this crate already uses #[schemars(range(...))] in delivery.rs, so the description is not the highest rung available."
+    },
+    {
+     "technique": "write-freshness-gate",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-types/src/rpc.rs:615 ModRulesSetParams holds only `rules`, a whole-list replace with no proof of the version read. The MCP moderator_rules_set tool and the console RulesPanel both write through it, so a stale read can overwrite the other's edit. CharacterDocSetParams in catalog.rs:154 shows the crate's own base_digest precondition."
+    },
+    {
+     "technique": "server-composition",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/schema.rs:180 Registry half only: the published contract is a projection of the one method table, not a parallel list; MCP input schemas are cut from that contract. The door obligations are not this crate's."
+    },
+    {
+     "technique": "sealed-continuation-state",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-types/src/rpc.rs:7 The wire contract states the opacity obligation for cursors in both directions; a cursor type carrying authority is absent from the paging shapes."
+    }
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "mcp-tools",
+   "context": "console-shell-router",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-09T00:24:17.554745+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "mcp-tools"
+   ],
+   "techniques": [
+    "authentication-and-scoping",
+    "enumeration-without-a-scope",
+    "sealed-continuation-state",
+    "server-composition",
+    "tool-schema-design",
+    "transport-selection"
+   ],
+   "deviations": 1,
+   "context": "daemon-core-rpc",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-09T00:24:17.554745+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "mcp-tools"
+   ],
+   "techniques": [
+    "sealed-continuation-state",
+    "server-composition",
+    "tool-schema-design",
+    "write-freshness-gate"
+   ],
+   "deviations": 1,
+   "context": "types-crate",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

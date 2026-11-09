@@ -3437,8 +3437,12 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "deviation",
+          "priorNotApplicable": 4,
+          "evidence": "crates/shadowrunr-daemon/src/rpc.rs:203 Every MCP tool and POST /rpc funnel through this door, yet it contains no panic catch, timeout or result-size cap, so limits are left to each handler and a handler panic awaited in the `shadowrunr mcp` stdio loop ends the transport for every tool.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:cb2b1c9f6fef5eb9",
+          "evaluatedRevision": 35
         },
         {
           "subject": "test-harness",
@@ -4935,8 +4939,12 @@
           "revision": 34,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "deviation",
+          "priorNotApplicable": 4,
+          "evidence": "crates/shadowrunr-types/src/rpc.rs:292 The floor of `limit` lives only in this doc comment, so the generated contract publishes `minimum: 0` into the `list_runs` input schema while dispatch refuses 0 with \"limit must be at least 1\", a published contract the server does not honour.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:cb2b1c9f6fef5eb9",
+          "evaluatedRevision": 35
         },
         {
           "subject": "agent-memory",
