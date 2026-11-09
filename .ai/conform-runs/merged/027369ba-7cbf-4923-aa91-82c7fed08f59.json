@@ -1,0 +1,17 @@
+{
+ "schema": "conform-run/1",
+ "worker": "027369ba-7cbf-4923-aa91-82c7fed08f59",
+ "subject": "mcp-tools",
+ "evaluatedAt": "2026-11-09T02:59:13.025838+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [],
+ "declined": [
+  {
+   "subject": "mcp-tools",
+   "context": "console-shell-router",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": []
+}
