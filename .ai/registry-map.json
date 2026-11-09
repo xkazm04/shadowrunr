@@ -2362,8 +2362,12 @@
           "revision": 52,
           "changedAt": "2026-10-25",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "deviation",
+          "priorNotApplicable": 3,
+          "evidence": "apps/console/src/pages/reconcile/DirectivesPage.tsx:175 The durable review surface for model-proposed standing rules shows only the extracted directive text, because the Directive contract carries no source utterance and the chat that held it is session-only, so after a reload the owner is asked to Keep or Drop a claim with nothing to check it against.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:2b62b4004acc600d",
+          "evaluatedRevision": 53
         },
         {
           "subject": "agent-browser-control",
@@ -4288,8 +4292,12 @@
           "revision": 52,
           "changedAt": "2026-10-25",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "deviation",
+          "priorNotApplicable": 3,
+          "evidence": "crates/shadowrunr-sim/src/nights.rs:82 The multi-night harness discards the forced sleep cycle's Result and NightsReport has no per-pass outcome field, while the cycle record sits in a temp memory dir deleted after the last night unless keep_memory is set, so a night two that ran on a failed consolidation is indistinguishable from one that ran on a good one.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:2b62b4004acc600d",
+          "evaluatedRevision": 53
         }
       ],
       "governance": "governed"
@@ -5627,8 +5635,12 @@
           "revision": 52,
           "changedAt": "2026-10-25",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 3
+          "state": "not-applicable",
+          "priorNotApplicable": 3,
+          "evidence": "characters/malakor/constitution.md:3 The package is authored, read-only identity input with no capture, store, consolidation, decay or recall of its own: a case-insensitive search of characters/malakor found zero hits for memory, consolidat, belief, episodic and supersed, and its mentions of remembering (constitution.md:24, bible.md:56) are persona behaviour implemented in the brain.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:2b62b4004acc600d",
+          "evaluatedRevision": 53
         },
         {
           "subject": "voice-io",

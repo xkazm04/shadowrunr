@@ -1,0 +1,152 @@
+{
+ "schema": "conform-run/1",
+ "worker": "95419645-4d59-404c-a8df-61ed626ad39f",
+ "subject": "agent-memory",
+ "evaluatedAt": "2026-11-09T01:03:40.393294+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "sim-runner-judging",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-sim/src/nights.rs:82 The multi-night harness discards the forced sleep cycle's Result and NightsReport has no per-pass outcome field, while the cycle record sits in a temp memory dir deleted after the last night unless keep_memory is set, so a night two that ran on a failed consolidation is indistinguishable from one that ran on a good one.",
+   "techniques": [
+    {
+     "technique": "coverage-instrumentation",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-sim/src/nights.rs:82 The technique requires a completion rate per pass reported beside quality, and an instrument honest about its own failure. brain.last_consolidation() exposes the Result (already consulted at line 80) but no outcome reaches NightRow or NightsReport. Scope: on-show moments are written deterministically without the sleep cycle (brain moments.rs:3-5), so shown/used are not zeroed by this; what goes unreported is whether the consolidated facts and habits that night two ran on exist."
+    },
+    {
+     "technique": "probe-without-write-back",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/runner.rs:1136 Runs exercise the real Brain (build_brain) against a per-run temp store removed at runner.rs:1153-1154, so recall write-back cannot reach a production ranking. Sharing across nights is the behaviour under simulation, inside one throwaway store."
+    },
+    {
+     "technique": "baseline-ladder",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/nights.rs:14 Conformant only through the technique's 'when not to use it' branch: there is no task set with checkable memory answers, so it instruments whether recalled items were acted on and claims no worth. No no-memory arm exists (case-insensitive search for baseline and no-memory variants in src found none), so the pipeline's value stays unmeasured here."
+    },
+    {
+     "technique": "exposure-is-not-credit",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/nights.rs:192 Used is counted per moment from content evidence in the host's lines, separate from shown, and nothing flows back into the store as credit."
+    },
+    {
+     "technique": "observation-clock",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-sim/src/nights.rs:65 Harness half only: message instants and the consolidation time are supplied on the multi-night clock rather than read from the process. Whether the distiller prompt grounds against them lives in the brain and was not judged here."
+    },
+    {
+     "technique": "memory-governance",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-sim/src/nights.rs:186 The sim only reads the store directly; a search of the crate for MemoryStore and store write calls found open and this fact read, so it adds no second belief writer and has no lane to govern."
+    },
+    {
+     "technique": "pending-beliefs-live-apart",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-sim/src/judge.rs:265 Consumer of the directive store only, and this read filters correctly. The store's shape belongs to the reconcile crate, not this context."
+    }
+   ]
+  },
+  {
+   "context": "character-package",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "characters/malakor/constitution.md:3 The package is authored, read-only identity input with no capture, store, consolidation, decay or recall of its own: a case-insensitive search of characters/malakor found zero hits for memory, consolidat, belief, episodic and supersed, and its mentions of remembering (constitution.md:24, bible.md:56) are persona behaviour implemented in the brain.",
+   "techniques": [
+    {
+     "technique": "memory-governance",
+     "verdict": "not-applicable",
+     "evidence": "characters/malakor/constitution.md:4 States the human-gated boundary for identity, but this package contains no write path to govern; enforcement, if any, lives in the code that reads it."
+    }
+   ],
+   "absenceTerms": [
+    "memory",
+    "consolidat",
+    "belief",
+    "episodic",
+    "supersed"
+   ]
+  },
+  {
+   "context": "console-reconcile-page",
+   "subject": "agent-memory",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "apps/console/src/pages/reconcile/DirectivesPage.tsx:175 The durable review surface for model-proposed standing rules shows only the extracted directive text, because the Directive contract carries no source utterance and the chat that held it is session-only, so after a reload the owner is asked to Keep or Drop a claim with nothing to check it against.",
+   "techniques": [
+    {
+     "technique": "pending-beliefs-live-apart",
+     "verdict": "deviation",
+     "evidence": "apps/console/src/pages/reconcile/DirectivesPage.tsx:175 The technique's review card must show the original sentence above the extraction. Directive has id, kind, text, scope, created_ms, active and proposed only (shadowrunr-types reconcile.rs:373-387). ChatPage does show the operator's turn above the chip, but only within the in-memory session."
+    },
+    {
+     "technique": "memory-governance",
+     "verdict": "conformant",
+     "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:149 Model-proposed standing rules reach the operator as inactive proposals with explicit Keep and Drop. Confirmed server-side: only the owner's paths leave proposed (shadowrunr-reconcile directives.rs:12)."
+    },
+    {
+     "technique": "working-memory",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/reconcile/session.ts:1 This is operator UI state, not an agent's operative task state; the Reconciler's conversation log is held by the daemon."
+    }
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-09T01:03:40.393294+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [
+    "baseline-ladder",
+    "coverage-instrumentation",
+    "exposure-is-not-credit",
+    "memory-governance",
+    "observation-clock",
+    "pending-beliefs-live-apart",
+    "probe-without-write-back"
+   ],
+   "deviations": 1,
+   "context": "sim-runner-judging",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-09T01:03:40.393294+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [
+    "memory-governance"
+   ],
+   "deviations": 0,
+   "context": "character-package",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  },
+  {
+   "ts": "2026-11-09T01:03:40.393294+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "agent-memory"
+   ],
+   "techniques": [
+    "memory-governance",
+    "pending-beliefs-live-apart",
+    "working-memory"
+   ],
+   "deviations": 1,
+   "context": "console-reconcile-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}

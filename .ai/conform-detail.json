@@ -9126,6 +9126,94 @@
         "at": "2026-11-09T00:44:06.857257+00:00",
         "reason": "reviewer (sonnet): The not-applicable anchor, packages/stage-kit/package.json:15, is the package's own gate (`eslint src --max-warnings 0`), so it doesn't show a missing precondition. The 'absence' claim was searched only in src/ui, and the context's own Hexmap.tsx:117 and :122 use eslint-disable waivers, so the gate "
       }
+    },
+    "3048d794-6232-48f9-ab59-cfe44cb0d0d2/agent-memory": {
+      "context": "sim-runner-judging",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T01:03:40.393Z",
+      "worker": "95419645-4d59-404c-a8df-61ed626ad39f",
+      "techniques": [
+        {
+          "technique": "coverage-instrumentation",
+          "verdict": "deviation",
+          "evidence": "crates/shadowrunr-sim/src/nights.rs:82 The technique requires a completion rate per pass reported beside quality, and an instrument honest about its own failure. brain.last_consolidation() exposes the Result (already consulted at line 80) but no outcome reaches NightRow or NightsReport. Scope: on-show moments are written deterministically without the sleep cycle (brain moments.rs:3-5), so shown/used are not zeroed by this; what goes unreported is whether the consolidated facts and habits that night two ran on exist."
+        },
+        {
+          "technique": "probe-without-write-back",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-sim/src/runner.rs:1136 Runs exercise the real Brain (build_brain) against a per-run temp store removed at runner.rs:1153-1154, so recall write-back cannot reach a production ranking. Sharing across nights is the behaviour under simulation, inside one throwaway store."
+        },
+        {
+          "technique": "baseline-ladder",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-sim/src/nights.rs:14 Conformant only through the technique's 'when not to use it' branch: there is no task set with checkable memory answers, so it instruments whether recalled items were acted on and claims no worth. No no-memory arm exists (case-insensitive search for baseline and no-memory variants in src found none), so the pipeline's value stays unmeasured here."
+        },
+        {
+          "technique": "exposure-is-not-credit",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-sim/src/nights.rs:192 Used is counted per moment from content evidence in the host's lines, separate from shown, and nothing flows back into the store as credit."
+        },
+        {
+          "technique": "observation-clock",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-sim/src/nights.rs:65 Harness half only: message instants and the consolidation time are supplied on the multi-night clock rather than read from the process. Whether the distiller prompt grounds against them lives in the brain and was not judged here."
+        },
+        {
+          "technique": "memory-governance",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-sim/src/nights.rs:186 The sim only reads the store directly; a search of the crate for MemoryStore and store write calls found open and this fact read, so it adds no second belief writer and has no lane to govern."
+        },
+        {
+          "technique": "pending-beliefs-live-apart",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-sim/src/judge.rs:265 Consumer of the directive store only, and this read filters correctly. The store's shape belongs to the reconcile crate, not this context."
+        }
+      ]
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/agent-memory": {
+      "context": "character-package",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T01:03:40.393Z",
+      "worker": "95419645-4d59-404c-a8df-61ed626ad39f",
+      "techniques": [
+        {
+          "technique": "memory-governance",
+          "verdict": "not-applicable",
+          "evidence": "characters/malakor/constitution.md:4 States the human-gated boundary for identity, but this package contains no write path to govern; enforcement, if any, lives in the code that reads it."
+        }
+      ]
+    },
+    "cc2fd542-4e2c-4527-bb2d-c132b966dc3e/agent-memory": {
+      "context": "console-reconcile-page",
+      "subject": "agent-memory",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T01:03:40.393Z",
+      "worker": "95419645-4d59-404c-a8df-61ed626ad39f",
+      "techniques": [
+        {
+          "technique": "pending-beliefs-live-apart",
+          "verdict": "deviation",
+          "evidence": "apps/console/src/pages/reconcile/DirectivesPage.tsx:175 The technique's review card must show the original sentence above the extraction. Directive has id, kind, text, scope, created_ms, active and proposed only (shadowrunr-types reconcile.rs:373-387). ChatPage does show the operator's turn above the chip, but only within the in-memory session."
+        },
+        {
+          "technique": "memory-governance",
+          "verdict": "conformant",
+          "evidence": "apps/console/src/pages/reconcile/ChatPage.tsx:149 Model-proposed standing rules reach the operator as inactive proposals with explicit Keep and Drop. Confirmed server-side: only the owner's paths leave proposed (shadowrunr-reconcile directives.rs:12)."
+        },
+        {
+          "technique": "working-memory",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/reconcile/session.ts:1 This is operator UI state, not an agent's operative task state; the Reconciler's conversation log is held by the daemon."
+        }
+      ]
     }
   }
 }
