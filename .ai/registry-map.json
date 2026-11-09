@@ -1893,8 +1893,12 @@
           "revision": 23,
           "changedAt": "2026-10-18",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:42 The page's only sound source is a finished clip file played in a video element, and a case-insensitive search of the whole onair directory, tests included, found no speechSynthesis, getUserMedia, SpeechRecognition, MediaRecorder or AudioContext, so it neither captures nor synthesizes speech.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:ad2538ae80ec48fd",
+          "evaluatedRevision": 24
         },
         {
           "subject": "video-assembly",

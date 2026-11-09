@@ -9214,6 +9214,32 @@
           "evidence": "apps/console/src/pages/reconcile/session.ts:1 This is operator UI state, not an agent's operative task state; the Reconciler's conversation log is held by the daemon."
         }
       ]
+    },
+    "2c9b35e1-8018-4269-bd27-cb947122a89b/voice-io": {
+      "context": "console-onair-page",
+      "subject": "voice-io",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T01:18:41.814Z",
+      "worker": "d571aed6-632a-47ab-8726-8abf4f21ff87",
+      "techniques": [
+        {
+          "technique": "speech-timing-timeline",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:65 Pre-rendered media, which the technique excludes; nothing moves with the audio, and the lines are a seek list. The page does label which source its times came from."
+        },
+        {
+          "technique": "tts-pipeline",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/player.ts:1 The replay player applies transcript events to a scene; it plays no audio."
+        },
+        {
+          "technique": "voice-ux-integration",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/onair/ClipPlayer.tsx:43 Playback is the browser's native video controls on a clip the operator opened; there is no read-aloud or narration."
+        }
+      ]
     }
   }
 }
