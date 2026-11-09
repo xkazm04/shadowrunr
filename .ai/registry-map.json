@@ -1626,8 +1626,12 @@
           "revision": 1,
           "changedAt": "2026-09-05",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 5
+          "state": "not-applicable",
+          "priorNotApplicable": 5,
+          "evidence": "apps/console/src/pages/characters/RulesTab.tsx:25 The page reads character data through named, typed daemon RPCs and never takes user-typed SQL against an external database; a case-insensitive search of all files in apps/console/src/pages/characters found zero hits for sql, information_schema, safeMode, dialect and introspect, so the subject's precondition does not hold.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:60a26f15745fd8c1",
+          "evaluatedRevision": 1
         }
       ],
       "governance": "governed"

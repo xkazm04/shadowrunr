@@ -9467,6 +9467,47 @@
           "evidence": "docs/spec/contract.md:131 The only package schema here governs character content packages, which carry no trained weights, so it is outside this subject."
         }
       ]
+    },
+    "20f1e644-e83b-481d-864f-cb15b9124d7e/sql-console": {
+      "context": "console-characters-page",
+      "subject": "sql-console",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T03:26:21.961Z",
+      "worker": "e745a5f5-b58f-4bc7-a3b3-77ce146000d3",
+      "techniques": [
+        {
+          "technique": "safe-mode-guarding",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/RulesTab.tsx:28 Writes are named RPC mutations with structured params; there is no statement string to classify as read or mutating."
+        },
+        {
+          "technique": "introspection-architecture",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/routes.ts:8 The tab list that follows covers character package documents, rules, tones, voice and moderation; none is a schema browser or catalog view."
+        },
+        {
+          "technique": "dialect-capability-declaration",
+          "verdict": "not-applicable",
+          "evidence": "crates/shadowrunr-brain/Cargo.toml:18 The only SQL engine in the repo is one bundled SQLite memory index the app owns, which is data-access scope; there are no connector families. A search of apps and crates found no postgres, mysql or connection-string use."
+        },
+        {
+          "technique": "editor-ergonomics",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/SituationsTab.tsx:91 Input on this page is pickers and form fields like this tournament select; there is no SQL editing surface. The console app's dependencies include no code editor."
+        },
+        {
+          "technique": "result-fidelity",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/RulesTab.tsx:7 The page renders fixed contract types, not arbitrary engine rows with NULLs, truncation bounds or engine errors."
+        },
+        {
+          "technique": "nl-assist-gating",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/characters/ToneVariants.tsx:1 The page's model lane drafts character dialogue lines, not SQL, so there is no generated statement to gate."
+        }
+      ]
     }
   }
 }

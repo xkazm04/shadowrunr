@@ -1,0 +1,78 @@
+{
+ "schema": "conform-run/1",
+ "worker": "e745a5f5-b58f-4bc7-a3b3-77ce146000d3",
+ "subject": "sql-console",
+ "evaluatedAt": "2026-11-09T03:26:21.961614+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-characters-page",
+   "subject": "sql-console",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/characters/RulesTab.tsx:25 The page reads character data through named, typed daemon RPCs and never takes user-typed SQL against an external database; a case-insensitive search of all files in apps/console/src/pages/characters found zero hits for sql, information_schema, safeMode, dialect and introspect, so the subject's precondition does not hold.",
+   "techniques": [
+    {
+     "technique": "safe-mode-guarding",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/RulesTab.tsx:28 Writes are named RPC mutations with structured params; there is no statement string to classify as read or mutating."
+    },
+    {
+     "technique": "introspection-architecture",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/routes.ts:8 The tab list that follows covers character package documents, rules, tones, voice and moderation; none is a schema browser or catalog view."
+    },
+    {
+     "technique": "dialect-capability-declaration",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-brain/Cargo.toml:18 The only SQL engine in the repo is one bundled SQLite memory index the app owns, which is data-access scope; there are no connector families. A search of apps and crates found no postgres, mysql or connection-string use."
+    },
+    {
+     "technique": "editor-ergonomics",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/SituationsTab.tsx:91 Input on this page is pickers and form fields like this tournament select; there is no SQL editing surface. The console app's dependencies include no code editor."
+    },
+    {
+     "technique": "result-fidelity",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/RulesTab.tsx:7 The page renders fixed contract types, not arbitrary engine rows with NULLs, truncation bounds or engine errors."
+    },
+    {
+     "technique": "nl-assist-gating",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/characters/ToneVariants.tsx:1 The page's model lane drafts character dialogue lines, not SQL, so there is no generated statement to gate."
+    }
+   ],
+   "absenceTerms": [
+    "sql",
+    "information_schema",
+    "safeMode",
+    "dialect",
+    "introspect"
+   ]
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-09T03:26:21.961614+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "sql-console"
+   ],
+   "techniques": [
+    "dialect-capability-declaration",
+    "editor-ergonomics",
+    "introspection-architecture",
+    "nl-assist-gating",
+    "result-fidelity",
+    "safe-mode-guarding"
+   ],
+   "deviations": 0,
+   "context": "console-characters-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
