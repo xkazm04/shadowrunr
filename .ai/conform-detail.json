@@ -9313,6 +9313,68 @@
           "evidence": "apps/console/src/pages/brain/Viewer.tsx:117 The transcript is fetched for a read-only viewer; nothing here rewrites history sent to a model."
         }
       ]
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/invariant-placement": {
+      "context": "character-package",
+      "subject": "invariant-placement",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T02:15:39.919Z",
+      "worker": "43f12258-45f0-4312-81a8-108f96511890",
+      "techniques": [
+        {
+          "technique": "placement-precedes-gate",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/constitution.md:4 Stated mechanism is not the real one: crates/shadowrunr-daemon/src/character_doc.rs:31 lists constitution.md as writable and set() treats it like bible.md; approval is the console tool's cls GATED (docs/spec/contract.md:2291 documents the card, not a commit). Second placement gap, see notes: the situation-to-rubric id join has no named altitude."
+        },
+        {
+          "technique": "constraint-deletion-is-silent",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-brain/src/character.rs:1233 Negative artifact loads the real malakor package, so deleting rails = [\"crisis-handoff\"] at character.toml:11 turns it red; rules.rs also has set_rule_refuses_a_rail_and_writes_nothing on the same package. Judged by reading: not run, and its CI rung was not checked."
+        },
+        {
+          "technique": "derived-properties-cannot-be-forged",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-brain/src/character.rs:1419 The declared claim at character.toml:88-89 (all but speech_cps equal the engine defaults) is pinned by this test, which compares pkg.tuning with Tuning::DEFAULT and each entry with TUNING_DEFAULTS, so it cannot drift silently. I also compared the values by hand and they match today."
+        },
+        {
+          "technique": "repairing-check-erases-its-evidence",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-brain/src/stall.rs:285 StallBank::load falls back to built-in lines for a missing file or empty list, a documented coercion; this test asserts on Malakor's real bank that the fallback did not fire, rather than asserting the repaired value is in range."
+        },
+        {
+          "technique": "occurrence-is-not-a-type",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-brain/src/stall.rs:178 The stalls.toml:2 rule (never the same line within the last ten) is about pick order, which no type holds; it is carried by the Staller at run time and a repeat-window test (stall.rs:354-357), not assumed from the compiler. Malakor's 24 lines keep the min(n-1) window at ten. Whether a repo-level inventory of such terms exists was not checked."
+        },
+        {
+          "technique": "shape-with-a-not-applicable-member",
+          "verdict": "conformant",
+          "evidence": "characters/malakor/rig/m8.spec.json:115 Honest exception under the producer audit: this package really produces mode none, formspec.py refuses a region on it, and split.py:157 acts differently (a procedural element with no pixels), so the arm is live rather than compiler-mandated dead code."
+        },
+        {
+          "technique": "build-time-evaluation-of-cross-value-invariants",
+          "verdict": "not-applicable",
+          "evidence": "characters/malakor/rig/m8.spec.json:9 Cross-value geometry, but read from a file at run time, which is the technique's first denial; the placement would be the door (check_spec in tools/rig), which today checks these are numbers and not their ordering."
+        },
+        {
+          "technique": "indistinguishable-members-do-not-rise",
+          "verdict": "not-applicable",
+          "evidence": "characters/malakor/rig/m8.spec.json:8 Positional [x, y] pairs, but each pair is one value produced and consumed together (the technique's own when-not), and nothing here claims a structural guarantee separating the members."
+        },
+        {
+          "technique": "completeness-at-emission",
+          "verdict": "not-applicable",
+          "evidence": "characters/malakor/character.toml:3 The package is inbound configuration parsed at a load door, not an assembled outbound payload, so the emission rule's precondition does not hold."
+        },
+        {
+          "technique": "string-keyed-context-is-an-unchecked-join",
+          "verdict": "not-applicable",
+          "evidence": "characters/malakor/situations.json:192 These are static catalogue tags, not a per-request bag of type-erased values, so the precondition does not hold; the same failure shape does occur for rubric ids and is reported in notes and registryProposal. The rule: prefix is closed at the door (character.rs:96, negative test at character.rs:1634)."
+        }
+      ],
+      "registryProposal": "string-keyed-context-is-an-unchecked-join is scoped by its use_when to per-request maps, but its failure (writer and reader agree only by spelling across two files, and a mismatch takes the pass path) also occurs in a static catalogue joined by id to a second file. Consider widening the trigger, or adding a technique for declarative id joins between data files."
     }
   }
 }

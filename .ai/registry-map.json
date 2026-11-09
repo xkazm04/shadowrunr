@@ -5791,7 +5791,11 @@
           "revision": 9,
           "changedAt": "2026-09-21",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "characters/malakor/constitution.md:4 The constitution names a reviewed commit as the only way it changes, yet character.doc.set replaces it in the working tree with no constitution-specific check in the daemon, so the package's highest-blast-radius rule is really held by the console tool's GATED class rather than the altitude it states.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:89cd666907c6c9d6",
+          "evaluatedRevision": 10
         }
       ],
       "governance": "governed"
