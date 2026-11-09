@@ -9282,6 +9282,37 @@
           "evidence": "apps/console/src/pages/onair/clipModel.ts:7 This is the publish funnel for stream clips; it has no narration synthesis, spend guard, dry mode or assembly from logged offsets."
         }
       ]
+    },
+    "c2325be4-a41e-48f5-9050-bb31c09bb12a/prompt-assembly": {
+      "context": "console-brain-page",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T01:53:52.194Z",
+      "worker": "22b521b0-340d-4413-928c-7cca9b90ee98",
+      "techniques": [
+        {
+          "technique": "layered-composition",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/useBrain.ts:50 The page pages finished ledger rows in for display; it has no sections, layers or assembler."
+        },
+        {
+          "technique": "context-budgeting",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/useBrain.ts:13 This bounds network reads for a chart, in pages and rows; it is not a token allocation for a prompt."
+        },
+        {
+          "technique": "cache-breakpoint-allocation",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/engineModel.ts:67 The page sums cache-read telemetry after the calls happened; it allocates no cut points."
+        },
+        {
+          "technique": "history-compaction",
+          "verdict": "not-applicable",
+          "evidence": "apps/console/src/pages/brain/Viewer.tsx:117 The transcript is fetched for a read-only viewer; nothing here rewrites history sent to a model."
+        }
+      ]
     }
   }
 }

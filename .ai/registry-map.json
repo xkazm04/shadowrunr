@@ -1068,8 +1068,12 @@
           "revision": 44,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 8
+          "state": "not-applicable",
+          "priorNotApplicable": 8,
+          "evidence": "apps/console/src/pages/brain/useBrain.ts:51 A case-insensitive search of apps/console/src/pages/brain found zero hits for prompt, compaction, fingerprint, assembler and system_prompt, and every daemon call found there is a read RPC such as this one, so the page displays run and ledger data and assembles no prompt.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:ad13b2ee69c25e8d",
+          "evaluatedRevision": 44
         },
         {
           "subject": "bounded-enumeration",

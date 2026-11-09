@@ -1,0 +1,72 @@
+{
+ "schema": "conform-run/1",
+ "worker": "22b521b0-340d-4413-928c-7cca9b90ee98",
+ "subject": "prompt-assembly",
+ "evaluatedAt": "2026-11-09T01:53:52.194263+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "console-brain-page",
+   "subject": "prompt-assembly",
+   "bundle": "software-engineering",
+   "state": "not-applicable",
+   "evidence": "apps/console/src/pages/brain/useBrain.ts:51 A case-insensitive search of apps/console/src/pages/brain found zero hits for prompt, compaction, fingerprint, assembler and system_prompt, and every daemon call found there is a read RPC such as this one, so the page displays run and ledger data and assembles no prompt.",
+   "techniques": [
+    {
+     "technique": "layered-composition",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/useBrain.ts:50 The page pages finished ledger rows in for display; it has no sections, layers or assembler."
+    },
+    {
+     "technique": "context-budgeting",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/useBrain.ts:13 This bounds network reads for a chart, in pages and rows; it is not a token allocation for a prompt."
+    },
+    {
+     "technique": "cache-breakpoint-allocation",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/engineModel.ts:67 The page sums cache-read telemetry after the calls happened; it allocates no cut points."
+    },
+    {
+     "technique": "history-compaction",
+     "verdict": "not-applicable",
+     "evidence": "apps/console/src/pages/brain/Viewer.tsx:117 The transcript is fetched for a read-only viewer; nothing here rewrites history sent to a model."
+    }
+   ],
+   "absenceTerms": [
+    "prompt",
+    "compaction",
+    "fingerprint",
+    "assembler",
+    "system_prompt"
+   ]
+  }
+ ],
+ "declined": [
+  {
+   "subject": "prompt-assembly",
+   "context": "workspace-tooling-and-policy",
+   "reason": "the seat returned unknown"
+  }
+ ],
+ "consults": [
+  {
+   "ts": "2026-11-09T01:53:52.194263+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "prompt-assembly"
+   ],
+   "techniques": [
+    "cache-breakpoint-allocation",
+    "context-budgeting",
+    "history-compaction",
+    "layered-composition"
+   ],
+   "deviations": 0,
+   "context": "console-brain-page",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
