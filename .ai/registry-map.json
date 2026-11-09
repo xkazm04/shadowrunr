@@ -3541,8 +3541,12 @@
           "revision": 28,
           "changedAt": "2026-10-15",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 4
+          "state": "deviation",
+          "priorNotApplicable": 4,
+          "evidence": "crates/shadowrunr-daemon/src/live.rs:196 The only identity guard refuses a run_id only while it is in flight, so a finished run's id is reissued to a new attempt whose seq numbers and /events envelope carry no attempt identity, and a client resuming with since reads a different attempt under the same name.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:93bd71853ab468b1",
+          "evaluatedRevision": 28
         },
         {
           "subject": "live-test-consent-and-evidence",

@@ -1,0 +1,108 @@
+{
+ "schema": "conform-run/1",
+ "worker": "0c1ad198-3647-4ef9-bba4-546e26aa02b7",
+ "subject": "fleet-orchestration",
+ "evaluatedAt": "2026-11-09T02:44:57.365796+00:00",
+ "provider": "claude",
+ "model": "claude-opus-5-5",
+ "pairs": [
+  {
+   "context": "daemon-core-rpc",
+   "subject": "fleet-orchestration",
+   "bundle": "software-engineering",
+   "state": "deviation",
+   "evidence": "crates/shadowrunr-daemon/src/live.rs:196 The only identity guard refuses a run_id only while it is in flight, so a finished run's id is reissued to a new attempt whose seq numbers and /events envelope carry no attempt identity, and a client resuming with since reads a different attempt under the same name.",
+   "techniques": [
+    {
+     "technique": "session-registry",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/e2e/resilience.rs:136 The e2e test pins that a run_id is accepted again after its run ended; the technique requires identity never reused. The entry is also only history, error and a done bool (live.rs:57-61), with no closed status vocabulary or transition door."
+    },
+    {
+     "technique": "durable-fleet-state",
+     "verdict": "deviation",
+     "evidence": "crates/shadowrunr-daemon/src/server.rs:73 The registry starts empty and daemon_cmd (cli.rs:1823-1845) has no reconcile step before serving. A run cut off by a crash keeps spec.json with no run.json; RunRow has no class field and the daemon never references RunClass::Incomplete, so runs.list cannot tell it from a finished unjudged run. Tournament resume does classify it, but ad-hoc sim.start runs get no terminal account."
+    },
+    {
+     "technique": "parallel-dispatch",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/live.rs:202 The cap is enforced inside register, the door sim.start uses, and overflow is refused with Busy naming max_live_runs, which fits the refuse-instead-of-queue case. sim tournament has its own concurrency setting; whether the two doors exclude each other was not established."
+    },
+    {
+     "technique": "result-harvest",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/cli.rs:1493 TournamentReport accounts planned, skipped, executed, failed, void, engine_failed and judge_pending with an exit code. Minor gap: the tournament_complete activity payload (cli.rs:1696-1697) omits engine_failed and judge_pending."
+    },
+    {
+     "technique": "absent-status-passthrough",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/runs.rs:83 With no provoked rule, health stays absent instead of being given a default, and an unreadable verdict leaves it None (runs.rs:106-117)."
+    },
+    {
+     "technique": "completion-claim-verification",
+     "verdict": "conformant",
+     "evidence": "crates/shadowrunr-daemon/src/runs.rs:221 Narrow fit: finished is derived from the run's artifacts whatever status run.json carries (doc at runs.rs:216-219). There are no receipts or delegate reports here."
+    },
+    {
+     "technique": "lifecycle-signals",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/live.rs:362 A run is an in-process task whose end arrives through its join handle, including panics, so the lost-signal case a sweeper exists for does not arise. No sweep exists; a blocked run would hold its slot, with engine calls bounded only by per-route timeouts (rpc.rs:152)."
+    },
+    {
+     "technique": "evidence-outranks-a-liveness-claim",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/live.rs:369 The slot is released only after the run's task has joined; there is no staleness budget or reclaim decision that could disagree with evidence."
+    },
+    {
+     "technique": "hibernation-and-resume",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/live.rs:60 A live run is either in flight or done, with no parked state; a case-insensitive search for hibernat across the crate found nothing. Tournament resume re-runs or re-judges rather than waking a session."
+    },
+    {
+     "technique": "outbound-compute-plane",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/server.rs:1 The daemon binds loopback only and runs execute in its own process, so there is no remote executor plane."
+    },
+    {
+     "technique": "heterogeneous-model-panels",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/config.rs:137 One judge tier is selected per run; this context convenes no multi-model panel on a decision."
+    },
+    {
+     "technique": "inherited-state-provenance",
+     "verdict": "not-applicable",
+     "evidence": "crates/shadowrunr-daemon/src/runs.rs:332 start_sim moves the previous attempt's directory aside before running (live.rs:340), so a daemon-started run inherits no predecessor artifacts."
+    }
+   ],
+   "registryProposal": "The standard does not say when a bounded in-process job stops being a fleet member. A daemon running tick-limited simulation runs as tasks has an admission door and a harvest but no process that can outlive or lose contact with its parent, so a stated boundary with background-jobs would settle whether session-registry and durable-fleet-state bind here."
+  }
+ ],
+ "declined": [],
+ "consults": [
+  {
+   "ts": "2026-11-09T02:44:57.365796+00:00",
+   "bundle": "software-engineering",
+   "subjects": [
+    "fleet-orchestration"
+   ],
+   "techniques": [
+    "absent-status-passthrough",
+    "completion-claim-verification",
+    "durable-fleet-state",
+    "evidence-outranks-a-liveness-claim",
+    "heterogeneous-model-panels",
+    "hibernation-and-resume",
+    "inherited-state-provenance",
+    "lifecycle-signals",
+    "outbound-compute-plane",
+    "parallel-dispatch",
+    "result-harvest",
+    "session-registry"
+   ],
+   "deviations": 1,
+   "context": "daemon-core-rpc",
+   "via": "curator-multi:claude",
+   "model": "claude-opus-5-5"
+  }
+ ]
+}
