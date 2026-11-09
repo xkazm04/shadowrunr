@@ -5290,8 +5290,12 @@
           "revision": 2,
           "changedAt": "2026-10-31",
           "confidence": "probable",
-          "state": "unknown",
-          "priorNotApplicable": 2
+          "state": "not-applicable",
+          "priorNotApplicable": 2,
+          "evidence": "shadowrunr.example.toml:142 This context's only contact with a trained model is commented-out operator paths to third-party Kokoro files, and a search of its 16 files and the whole tree found no package vocabulary (_extra_files, pytorch_version, bundle_root, rdf.yaml, weights_path: 0 hits; onnx hits 4 context files only as the sherpa-onnx engine name and voice paths), so no model package is authored, exported or validated here.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:bd272d2a3cc87197",
+          "evaluatedRevision": 2
         },
         {
           "subject": "prompt-assembly",

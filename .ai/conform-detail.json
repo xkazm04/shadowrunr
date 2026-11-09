@@ -9426,6 +9426,47 @@
         }
       ],
       "registryProposal": "string-keyed-context-is-an-unchecked-join is scoped by its use_when to per-request maps, but its failure (writer and reader agree only by spelling across two files, and a mismatch takes the pass path) also occurs in a static catalogue joined by id to a second file. Consider widening the trigger, or adding a technique for declarative id joins between data files."
+    },
+    "70f40362-0fe0-4f05-90cf-b95538e20c74/self-describing-model-packages": {
+      "context": "workspace-tooling-and-policy",
+      "subject": "self-describing-model-packages",
+      "bundle": "software-engineering",
+      "state": "not-applicable",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T03:15:35.201Z",
+      "worker": "4e267b56-3ad8-4620-bdb2-f74bbf7ace5f",
+      "techniques": [
+        {
+          "technique": "normative-layout-contract",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:142 An operator-supplied path to a third-party install; this context specifies no model package layout."
+        },
+        {
+          "technique": "config-frozen-artifact",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:143 The context only takes a path to the exported .onnx; the export itself is voice tooling outside this context (see notes)."
+        },
+        {
+          "technique": "symbolic-shape-constraints",
+          "verdict": "not-applicable",
+          "evidence": ".github/workflows/ci.yml:217 CI handles no model, and this context declares no input shape family that a solver could prove."
+        },
+        {
+          "technique": "declared-vs-derived-outputs",
+          "verdict": "not-applicable",
+          "evidence": "docs/spec/contract.md:1678 Kokoro is consumed as a third-party speech engine; no output metadata for a network or its post-processing is written here."
+        },
+        {
+          "technique": "advisory-version-floors",
+          "verdict": "not-applicable",
+          "evidence": "docs/guide/cli.md:780 The documented probe checks that files and the engine are usable; no package here records built-on framework versions to treat as floors."
+        },
+        {
+          "technique": "self-locating-validation-schema",
+          "verdict": "not-applicable",
+          "evidence": "docs/spec/contract.md:131 The only package schema here governs character content packages, which carry no trained weights, so it is outside this subject."
+        }
+      ]
     }
   }
 }
