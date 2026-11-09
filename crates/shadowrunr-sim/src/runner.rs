@@ -1848,6 +1848,17 @@ pub(crate) mod tests {
     #[tokio::test]
     #[ignore = "an A/B instrument, not a test: prints one row per run"]
     async fn raid_window_replay() {
+        raid_window_replay_seeds(8).await;
+    }
+
+    /// The instrument's own check: one seed per room, so its 140 lines stay measured and cannot
+    /// rot unseen, while the eight-seed replay stays an operator run.
+    #[tokio::test]
+    async fn raid_window_replay_one_seed_runs() {
+        raid_window_replay_seeds(1).await;
+    }
+
+    async fn raid_window_replay_seeds(seeds: u64) {
         use std::collections::hash_map::DefaultHasher;
         use std::collections::{HashMap, HashSet};
         use std::hash::{Hash, Hasher};
@@ -1866,7 +1877,7 @@ pub(crate) mod tests {
             if only_raids && population != "raid_moment" {
                 continue;
             }
-            for seed in 1..=8u64 {
+            for seed in 1..=seeds {
                 let run_id = format!("rw-{population}-{size}-{seed}");
                 let mut s = spec(&run_id, ModelTier::Haiku, size, 900);
                 s.population = population.into();
