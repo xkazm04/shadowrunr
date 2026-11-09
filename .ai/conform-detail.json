@@ -9518,6 +9518,42 @@
           "evidence": "apps/console/src/pages/characters/ToneVariants.tsx:1 The page's model lane drafts character dialogue lines, not SQL, so there is no generated statement to gate."
         }
       ]
+    },
+    "70f40362-0fe0-4f05-90cf-b95538e20c74/prompt-assembly": {
+      "context": "workspace-tooling-and-policy",
+      "subject": "prompt-assembly",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T03:53:35.499Z",
+      "worker": "ecae0d0a-8e2a-448b-b6bb-84b92b824859",
+      "techniques": [
+        {
+          "technique": "fingerprinting-and-cache-keys",
+          "verdict": "deviation",
+          "evidence": "docs/spec/contract.md:717 The row carries usage tokens (a size) but no fingerprint or digest. Brain::prefix_hash is documented 'for the ledger' (crates/shadowrunr-brain/src/lib.rs:503) yet has no non-test caller, and a search of crates/shadowrunr-engine for digest/sha/prompt-log terms found nothing. The run-level instrument_hash (contract.md:377) is a real version stamp but is not per call."
+        },
+        {
+          "technique": "context-budgeting",
+          "verdict": "deviation",
+          "evidence": "docs/spec/contract.md:791 The technique bars 'characters divided by a hopeful constant' unless the estimator has known error. The 3.5 and the 15% margin carry no measurement here or in crates/shadowrunr-reconcile/src/budget.rs:41-43, and 120k is not derived from a model window. The naming of cuts at line 796 does meet the truncation rule."
+        },
+        {
+          "technique": "layered-composition",
+          "verdict": "conformant",
+          "evidence": "docs/spec/contract.md:907 The contract fixes a stability-ordered stack and keeps per-segment and per-turn material out of the prefix (lines 316-317). This is specified here; the assembler itself belongs to brain-composition-memory."
+        },
+        {
+          "technique": "variable-interpolation",
+          "verdict": "conformant",
+          "evidence": "docs/spec/contract.md:193 A closed key set with loud failure at load. All nine keys are package-authored persona values, so the trust question reduces to authored, but no class is written at the declaration."
+        },
+        {
+          "technique": "contributed-document-admission",
+          "verdict": "not-applicable",
+          "evidence": "shadowrunr.example.toml:43 No third-party instruction documents are admitted: safe mode excludes harness-injected documents by default, and a search of contract.md for skill, plugin and third-party found none. Setting safe_mode to false would need a fresh look."
+        }
+      ]
     }
   }
 }
