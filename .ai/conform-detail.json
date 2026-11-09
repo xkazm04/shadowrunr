@@ -6931,16 +6931,32 @@
       "context": "stage-voice-client",
       "subject": "quality-gates",
       "bundle": "software-engineering",
-      "state": "unknown",
-      "evaluatedAt": "2026-11-03",
-      "evaluatedTs": "2026-11-03T23:42:40.001Z",
-      "techniques": [],
-      "withdrawn": {
-        "worker": "c5447a97-ac3f-4141-83e7-1ec66484ca86",
-        "state": "not-applicable",
-        "at": "2026-11-03T23:43:27.148682+00:00",
-        "reason": "reviewer (sonnet): report.ts:4 is a header comment, so the anchor is incidental and does not show the precondition is absent; the context has tests (frame.test.ts, player.test.ts, session.test.ts and others) that can refuse a change, and a grep for process.exit, max-warnings, baseline and waiver cannot prove that abse"
-      }
+      "state": "deviation",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T00:04:20.812Z",
+      "worker": "a3ee9074-0156-4eee-887b-1ad69a2e759e",
+      "techniques": [
+        {
+          "technique": "self-reported-gate-inputs",
+          "verdict": "deviation",
+          "evidence": "apps/stage/src/voice/session.ts:153 The wire has no liveness signal for the held state, and the `face` check has no other input, although the recording exists and the sibling av_sync and dead_air checks read it. A missing first report is handled loudly (watch.rs:244 returns unmeasured); only the stale held state escapes."
+        },
+        {
+          "technique": "unmeasurable-criteria",
+          "verdict": "conformant",
+          "evidence": "apps/stage/src/voice/report.ts:33 Nothing drawn and the placeholder both report silhouette, so an unknown form cannot count toward the rig share."
+        },
+        {
+          "technique": "match-the-resolved-artifact",
+          "verdict": "conformant",
+          "evidence": "apps/stage/scripts/lint-gate.test.mjs:82 The voice decoder's JSON.parse exemption is proven by running ESLint on a seeded copy under the real file name, so the engine's resolved configuration is tested rather than the config text."
+        },
+        {
+          "technique": "chokepoint-tag-registry",
+          "verdict": "not-applicable",
+          "evidence": "apps/stage/src/voice/frame.ts:39 One decoder door held by a negative-space lint rule; there is no per-operation wrapper table that a tag bijection would close."
+        }
+      ]
     },
     "5ca16ac4-6263-4c09-80d5-f32a969b16b6/quality-gates": {
       "context": "segments-runtime",
@@ -8944,6 +8960,37 @@
         }
       ],
       "registryProposal": "alignment-names-its-text only names character-indexed alignments returned by a synthesiser. An engine that exposes token ids and per-token durations, as here, has a single spoken index space and could be named as a case where the authored-versus-spoken choice does not arise."
+    },
+    "382c68f3-bc20-4cc7-8220-18aa850f7087/quality-gates": {
+      "context": "character-package",
+      "subject": "quality-gates",
+      "bundle": "software-engineering",
+      "state": "deviation",
+      "evaluatedAt": "2026-11-09",
+      "evaluatedTs": "2026-11-09T00:04:20.812Z",
+      "worker": "a3ee9074-0156-4eee-887b-1ad69a2e759e",
+      "techniques": [
+        {
+          "technique": "prose-rule-drift",
+          "verdict": "deviation",
+          "evidence": "characters/malakor/constitution.md:4 Audit answer for a direct commit: only a person noticing in review (git ls-files finds no CODEOWNERS). crates/shadowrunr-daemon/src/character_doc.rs:31 lists the file as replaceable, and docs/spec/contract.md:2291 documents that carve-out while this line was not updated. Partly backed: the Reconciler's path is refused at the action (crates/shadowrunr-reconcile/src/verify.rs:179), and agent writes are approval-gated."
+        },
+        {
+          "technique": "gate-laddering",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-brain/src/character.rs:1445 The real package is validated inside the Rust test suite, the merge rung, as well as by the `character validate` command and at write time through write_validated."
+        },
+        {
+          "technique": "gate-liveness",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-brain/src/character.rs:1587 The validator is fed a defective copy of this package's own situations.json and must report it, so a known-bad input is seen to fail."
+        },
+        {
+          "technique": "refusal-names-a-reachable-remedy",
+          "verdict": "conformant",
+          "evidence": "crates/shadowrunr-brain/src/rules.rs:174 The refusal names both package-relative files involved, and the remedy sits inside the package the reader is editing."
+        }
+      ]
     }
   }
 }

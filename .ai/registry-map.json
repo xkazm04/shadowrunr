@@ -5694,7 +5694,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "characters/malakor/constitution.md:4 The reviewed-commit rule has no mechanism behind it: no check refuses a direct commit to this file, and the daemon's documented character.doc.set path replaces it after an approval card with no commit at all, so the stated rule describes neither route.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:a5b34d39a4b8edd3",
+          "evaluatedRevision": 56
         },
         {
           "subject": "supply-chain",
@@ -6491,7 +6495,11 @@
           "revision": 54,
           "changedAt": "2026-10-14",
           "confidence": "probable",
-          "state": "unknown"
+          "state": "deviation",
+          "evidence": "apps/stage/src/voice/report.ts:30 The client promises that a watched `rig` means the face was on screen, yet it sends the state only on change with no heartbeat, so the gate reading voice.jsonl cannot tell a face still drawn from one that went dark after the last report.",
+          "evaluatedAt": "2026-11-09",
+          "evaluatedAgainst": "sha256-b2:a5b34d39a4b8edd3",
+          "evaluatedRevision": 56
         },
         {
           "subject": "video-assembly",
